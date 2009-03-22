@@ -1,0 +1,1 @@
+cube.o: cube.c
