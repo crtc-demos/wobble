@@ -1,0 +1,41 @@
+# This is a makefile.
+
+	LIBJTYPE =	libjtype
+	SDLCONFIG =	sdl-config
+
+	CC =		gcc
+
+	CFLAGS	:=	-O3 -g -Wall
+	LIBS	:=	-L/usr/lib -lm -lGL -lGLU -lglut -lpng
+	INCLUDE :=      
+
+	LDFLAGS = 	
+
+	OBJ = 		readpng.o transform.o parabolik.o
+
+	TARGET =	parabolik
+
+.PHONY:	clean
+
+all:	$(TARGET)
+
+clean:
+	rm -f $(TARGET) *.o
+
+cleaner:
+	rm -f $(TARGET) *.o *.d
+
+$(TARGET):	$(OBJ)
+	$(CC) $(LDFLAGS) $(OBJ) $(LIBS) -o $@
+
+%.o:	%.c
+	$(CC) $(CFLAGS) $(INCLUDE) -c $< -o $@
+
+%.d:	%.c
+	$(CC) $(INCLUDE) -MM $< > $@
+
+ifneq ($(MAKECMDGOALS),clean)
+ifneq ($(MAKECMDGOALS),cleaner)
+include	$(OBJ:.o=.d)
+endif
+endif

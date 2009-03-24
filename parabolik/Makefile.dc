@@ -1,0 +1,31 @@
+
+	STRIP =		kos-strip
+	DEPFLAGS =	-DDREAMCAST_KOS -D_arch_dreamcast
+
+	OBJS =	parabolik.o transform.o
+
+	TARGET = parabolik.elf
+
+	SRC =	parabolik.c transform.c
+
+.PHONY:	.depend
+
+all:	$(TARGET)
+
+clean:
+	rm -f $(OBJS) $(TARGET)
+
+run:	$(TARGET)
+	/usr/local/bin/dc-tool -b 115200 -x $(TARGET)
+
+$(TARGET):	$(OBJS)
+	$(KOS_CC) $(KOS_CFLAGS) $(KOS_LDFLAGS) -o $(TARGET) $(KOS_START) $(OBJS) -lgl -lm $(KOS_LIBS)
+	$(STRIP) $(TARGET)
+
+%.o:	%.c
+	$(KOS_CC) $(KOS_CFLAGS) $(KOS_INC_PATHS) -DDREAMCAST_KOS -c $< -o $@
+
+.depend:	Makefile.dc $(SRC)
+	$(KOS_CC) $(DEPFLAGS) $(INCLUDE) -MM $(SRC) > .depend
+
+include .depend
