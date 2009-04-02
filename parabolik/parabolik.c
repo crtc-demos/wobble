@@ -11,6 +11,13 @@
 #include <GL/glut.h>
 #endif
 
+#ifdef DREAMCAST_KOS
+extern uint8 romdisk[];
+
+KOS_INIT_FLAGS (INIT_DEFAULT);
+KOS_INIT_ROMDISK (romdisk);
+#endif
+
 #include "readpng.h"
 #include "transform.h"
 
@@ -375,6 +382,7 @@ fake_light (float normal[3])
   b = 64 + 191 * incidence;
   
   glColor4ub (r, g, b, 0);
+  glTexCoord2f (normalized_normal[0], normalized_normal[1]);
 }
 
 void
@@ -489,6 +497,10 @@ main (int argc, char* argv[])
 {
   int cable_type, quit = 0;
   float rot1 = 0.0;
+  kos_img_t front_txr, back_txr;
+  pvr_ptr_t texaddr;
+  GLuint texture[2];
+  int texno = 0, texcount = 0;
   
   cable_type = vid_check_cable ();
   
@@ -498,8 +510,26 @@ main (int argc, char* argv[])
     vid_init (DM_640x480_PAL_IL, PM_RGB565);
   
   pvr_init_defaults ();
-  
+
   glKosInit ();
+  
+  png_to_img ("/rd/front4a.png", PNG_NO_ALPHA, &front_txr);
+  texaddr = pvr_mem_malloc (front_txr.w * front_txr.h * 2);
+  pvr_txr_load_kimg (&front_txr, texaddr, PVR_TXRLOAD_INVERT_Y);
+  kos_img_free (&front_txr, 0);
+  
+  glGenTextures (2, &texture[0]);
+  
+  glBindTexture (GL_TEXTURE_2D, texture[0]);
+  glKosTex2D (GL_RGB565_TWID, front_txr.w, front_txr.h, texaddr);
+
+  png_to_img ("/rd/back4a.png", PNG_NO_ALPHA, &back_txr);
+  texaddr = pvr_mem_malloc (back_txr.w * back_txr.h * 2);
+  pvr_txr_load_kimg (&back_txr, texaddr, PVR_TXRLOAD_INVERT_Y);
+  kos_img_free (&back_txr, 0);
+  
+  glBindTexture (GL_TEXTURE_2D, texture[1]);
+  glKosTex2D (GL_RGB565_TWID, back_txr.w, back_txr.h, texaddr);
   
   glEnable (GL_DEPTH_TEST);
   glEnable (GL_CULL_FACE);
@@ -521,8 +551,18 @@ main (int argc, char* argv[])
 	     0.0,   0.0,   0.0,		/* Centre.  */
 	     0.0,   1.0,   0.0);	/* Up.  */
   
+  
   while (!quit)
     {
+      glBindTexture (GL_TEXTURE_2D, texture[texno]);
+
+      texcount++;
+      if (texcount > 100)
+        {
+	  texno = 1 - texno;
+	  texcount = 0;
+	}
+
       glKosBeginFrame ();
       
       glPushMatrix ();
