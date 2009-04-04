@@ -1,0 +1,2 @@
+parabolik.o: parabolik.c readpng.h transform.h
+transform.o: transform.c transform.h
