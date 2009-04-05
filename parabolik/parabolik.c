@@ -13,6 +13,8 @@
 
 #include "vector.h"
 
+#define EYE_POS 0.0, 0.0, -4.5
+
 #ifdef DREAMCAST_KOS
 extern uint8 romdisk[];
 
@@ -348,14 +350,17 @@ int main(int argc, char* argv[])
 }
 #else /* DREAMCAST_KOS.  */
 
+static matrix_t camera __attribute__((aligned(32)));
+static matrix_t invcamera __attribute__((aligned(32)));
+static matrix_t transform __attribute__((aligned(32)));
 static matrix_t rotate __attribute__((aligned(32)));
-static matrix_t unrotate __attribute__((aligned(32)));
 
 static void
-fake_light (float vertex[3], float normal[3])
+fake_light (float vertex[3], float normal[3], int front)
 {
-  float light[3] = { 0.2357, 0.2357, -0.9428 };
-  float eye[3] = { 0.0, 0.0, -4.5 };
+  float light[3] = { 0.2357, 0.2357, 0.9428 };
+  float eye[3] = { EYE_POS };
+  float vertex4[4], x_vertex[4], x_normal[4];
   float eye_to_vertex[3], reflection[4], tmp[3];
   float eye_norm_dot;
   float incidence, normalized_normal[3];
@@ -365,8 +370,11 @@ fake_light (float vertex[3], float normal[3])
   float x_b, y_b, z_b;
   
   vec_normalize (normalized_normal, normal);
-  
-  incidence = vec_dot (&light[0], &normalized_normal[0]);
+
+  /* Find the normal in eye space.  */
+  vec_transform (x_normal, (float *) &rotate[0][0], normalized_normal);
+
+  incidence = vec_dot (&light[0], &x_normal[0]);
   
   if (incidence < 0)
     incidence = 0;
@@ -377,10 +385,15 @@ fake_light (float vertex[3], float normal[3])
   
   glColor4ub (r, g, b, 0);
   
-  vec_sub (eye_to_vertex, vertex, eye);
+  /* We need the vertex in eye space.  This duplicates work!  */
+  memcpy (vertex4, vertex, sizeof (float) * 3);
+  vertex4[3] = 0.0;
+  vec_transform (x_vertex, (float *) &transform[0][0], vertex4);
+  vec_sub (eye_to_vertex, x_vertex, eye);
   vec_normalize (eye_to_vertex, eye_to_vertex);
-  eye_norm_dot = vec_dot (eye_to_vertex, normalized_normal);
-  vec_scale (tmp, normalized_normal, eye_norm_dot * 2.0);
+  
+  eye_norm_dot = vec_dot (eye_to_vertex, x_normal);
+  vec_scale (tmp, x_normal, -eye_norm_dot * 2.0);
   vec_add (reflection, eye_to_vertex, tmp);
   /*x = reflection[0];
   y = reflection[1];
@@ -389,8 +402,8 @@ fake_light (float vertex[3], float normal[3])
   mat_load ((matrix_t *) &unrotate[0][0]);
   mat_trans_nodiv (x, y, z, w);
   glKosMatrixDirty ();*/
-  reflection[3] = 1.0;
-  vec_transform (unrot, (float *) &unrotate[0][0], reflection);
+  reflection[3] = 0.0;
+  vec_transform (unrot, (float *) &invcamera[0][0], reflection);
   x = unrot[0];
   y = unrot[1];
   z = unrot[2];
@@ -406,41 +419,38 @@ fake_light (float vertex[3], float normal[3])
     
     for both, calculate lhs, then divide x, y by z.  */
   
-  x_f = 0.0 - x;
-  y_f = 0.0 - y;
-  z_f = -1.0 - z;
-  
-  if (z_f != 0.0)
+  if (front)
     {
-      x_f = 0.5 + 0.5 * (x_f / z_f);
-      y_f = 0.5 + 0.5 * (y_f / z_f);
+      x_f = 0.0 - x;
+      y_f = 0.0 - y;
+      z_f = -1.0 - z;
+
+      if (z_f != 0.0)
+	{
+	  x_f = 0.5 + 0.5 * (x_f / z_f);
+	  y_f = 0.5 + 0.5 * (y_f / z_f);
+	}
+
+      glTexCoord2f (x_f, y_f);
     }
-  
-  x_b = 0.0 - x;
-  y_b = 0.0 - y;
-  z_b = -1.0 - z;
-  
-  if (z_b != 0.0)
+  else
     {
-      x_b = 0.5 + 0.5 * (x_b / z_b);
-      y_b = 0.5 + 0.5 * (y_b / z_b);
+      x_b = 0.0 - x;
+      y_b = 0.0 - y;
+      z_b = 1.0 - z;
+
+      if (z_b != 0.0)
+	{
+	  x_b = 0.5 + 0.5 * (x_b / z_b);
+	  y_b = 0.5 - 0.5 * (y_b / z_b);
+	}
+
+      glTexCoord2f (x_b, y_b);
     }
-  
-  if (x_f < 0.0)
-    x_f = 0.0;
-  if (y_f < 0.0)
-    y_f = 0.0f;
-  if (x_f > 1.0)
-    x_f = 1.0;
-  if (y_f > 1.0)
-    y_f = 1.0;
-  
-  //printf ("%f %f\n", x_f, y_f);
-  glTexCoord2f (x_f, y_f);
 }
 
 void
-render_torus (float outer, float inner)
+render_torus (float outer, float inner, int front)
 {
   int major;
   const int minor_steps = 20, major_steps = 40;
@@ -471,10 +481,10 @@ render_torus (float outer, float inner)
 	     
 	     y is zero, so the corresponding terms disappear.  */
 
-	  min[1][0] = fcos (major_ang);
-	  min[0][0] = min[1][0] * orig_min_x + maj_x;
-	  min[1][1] = fsin (major_ang);
-	  min[0][1] = min[1][1] * orig_min_x + maj_y;
+	  min[1][0] = fcos (major_ang) * orig_min_x;
+	  min[0][0] = min[1][0] + maj_x;
+	  min[1][1] = fsin (major_ang) * orig_min_x;
+	  min[0][1] = min[1][1] + maj_y;
 	  
 	  if (major == 0)
 	    {
@@ -496,39 +506,41 @@ render_torus (float outer, float inner)
 	      glBegin (GL_TRIANGLE_STRIP);
 	      
 	      //glColor4ub (255, 255, 255, 0);
-	      fake_light (prev_row[minor - 1][0], prev_row[minor - 1][1]);
+	      fake_light (prev_row[minor - 1][0], prev_row[minor - 1][1],
+			  front);
 	      glVertex3fv ((GLfloat *) &prev_row[minor - 1][0]);
 	      
 	      //glColor4ub (255, 0, 0, 0);
-	      fake_light (prev_row[minor][0], prev_row[minor][1]);
+	      fake_light (prev_row[minor][0], prev_row[minor][1], front);
 	      glVertex3fv ((GLfloat *) &prev_row[minor][0]);
 	      
 	      if (major == major_steps)
 	        {
 		  //glColor4ub (255, 255, 0, 0);
-		  fake_light (first_row[minor - 1][0], first_row[minor - 1][1]);
+		  fake_light (first_row[minor - 1][0], first_row[minor - 1][1],
+			      front);
 		  glVertex3fv ((GLfloat *) &first_row[minor - 1][0]);
 		  
 		  //glColor4ub (0, 255, 0, 0);
 		  fake_light (first_row[minor_wrapped][0],
-			      first_row[minor_wrapped][1]);
+			      first_row[minor_wrapped][1], front);
 		  glVertex3fv ((GLfloat *) &first_row[minor_wrapped][0]);
 		}
 	      else
 	        {
 		  //glColor4ub (255, 255, 0, 0);
-		  fake_light (last[0], last[1]);
+		  fake_light (last[0], last[1], front);
 		  glVertex3fv (&last[0][0]);
 
 		  //glColor4ub (0, 255, 0, 0);
 		  if (minor == minor_steps)
 		    {
-		      fake_light (first[0], first[1]);
+		      fake_light (first[0], first[1], front);
 	              glVertex3fv (&first[0][0]);
 		    }
 		  else
 		    {
-		      fake_light (min[0], min[1]);
+		      fake_light (min[0], min[1], front);
 		      glVertex3fv (&min[0][0]);
 		    }
 		}
@@ -547,6 +559,23 @@ render_torus (float outer, float inner)
     }
 }
 
+static void
+init_pvr (void)
+{
+  pvr_init_params_t params = {
+    { PVR_BINSIZE_16,	/* Opaque polygons.  */
+      PVR_BINSIZE_0,	/* Opaque modifiers.  */
+      PVR_BINSIZE_0,	/* Translucent polygons.  */
+      PVR_BINSIZE_0,	/* Translucent modifiers.  */
+      PVR_BINSIZE_16 },	/* Punch-thrus.  */
+    512 * 1024,		/* Vertex buffer size 512K.  */
+    0,			/* No DMA.  */
+    0			/* No FSAA.  */
+  };
+  
+  pvr_init (&params);
+}
+
 int
 main (int argc, char* argv[])
 {
@@ -555,6 +584,7 @@ main (int argc, char* argv[])
   kos_img_t front_txr, back_txr;
   pvr_ptr_t texaddr;
   GLuint texture[2];
+  int i;
   
   cable_type = vid_check_cable ();
   
@@ -563,7 +593,7 @@ main (int argc, char* argv[])
   else
     vid_init (DM_640x480_PAL_IL, PM_RGB565);
   
-  pvr_init_defaults ();
+  init_pvr ();
 
   glKosInit ();
   
@@ -607,53 +637,101 @@ main (int argc, char* argv[])
 
   glMatrixMode (GL_MODELVIEW);
   glLoadIdentity ();
-  gluLookAt (0.0,   0.0,  -4.5,		/* Eye position.  */
+  gluLookAt (EYE_POS,			/* Eye position.  */
 	     0.0,   0.0,   0.0,		/* Centre.  */
 	     0.0,   1.0,   0.0);	/* Up.  */
   
+  glGetFloatv (GL_MODELVIEW_MATRIX, &camera[0][0]);
+  
+  invcamera[0][0] = camera[0][0];
+  invcamera[0][1] = camera[1][0];
+  invcamera[0][2] = camera[2][0];
+  invcamera[0][3] = 0.0;
+
+  invcamera[1][0] = camera[0][1];
+  invcamera[1][1] = camera[1][1];
+  invcamera[1][2] = camera[2][1];
+  invcamera[1][3] = 0.0;
+
+  invcamera[2][0] = camera[0][2];
+  invcamera[2][1] = camera[1][2];
+  invcamera[2][2] = camera[2][2];
+  invcamera[2][3] = 0.0;
+
+  invcamera[3][0] = 0.0;
+  invcamera[3][1] = 0.0;
+  invcamera[3][2] = 0.0;
+  invcamera[3][3] = 1.0;
+  
+  printf ("Inverted camera matrix:\n");
+  for (i = 0; i < 4; i++)
+    {
+      printf ("[ %f %f %f %f ]\n", invcamera[0][i], invcamera[1][i],
+	      invcamera[2][i], invcamera[3][i]);
+    }
   
   while (!quit)
     {
-      glBindTexture (GL_TEXTURE_2D, texture[0]);
-
       glKosBeginFrame ();
       
       glPushMatrix ();
       
+      #if 1
       glRotatef (rot1, 0.0, 1.0, 0.0);
       rot1 += 0.7;
       glRotatef (rot2, 1.0, 0.0, 0.0);
       rot2 += 0.29;
+      #else
+      glRotatef (rot1, 0.0, 0.0, 1.0);
+      rot1 += 0.7;
+      #endif
       
-      glGetFloatv (GL_MODELVIEW_MATRIX, &rotate[0][0]);
+      if (rot1 >= 360)
+        rot1 -= 360;
+
+      if (rot2 >= 360)
+        rot2 -= 360;
       
-      /* Transpose (rotation part only).  */
-      unrotate[0][0] = rotate[0][0];
-      unrotate[0][1] = rotate[1][0];
-      unrotate[0][2] = rotate[2][0];
-      unrotate[0][3] = 0.0;
+      glGetFloatv (GL_MODELVIEW_MATRIX, &transform[0][0]);
       
-      unrotate[1][0] = rotate[0][1];
-      unrotate[1][1] = rotate[1][1];
-      unrotate[1][2] = rotate[2][1];
-      unrotate[1][3] = 0.0;
+      /* Rotation part of transformation.  */
+      rotate[0][0] = transform[0][0];
+      rotate[1][0] = transform[1][0];
+      rotate[2][0] = transform[2][0];
+      rotate[3][0] = 0.0;
       
-      unrotate[2][0] = rotate[0][2];
-      unrotate[2][1] = rotate[1][2];
-      unrotate[2][2] = rotate[2][2];
-      unrotate[2][3] = 0.0;
+      rotate[0][1] = transform[0][1];
+      rotate[1][1] = transform[1][1];
+      rotate[2][1] = transform[2][1];
+      rotate[3][1] = 0.0;
       
-      unrotate[3][0] = 0.0;
-      unrotate[3][1] = 0.0;
-      unrotate[3][2] = 0.0;
-      unrotate[3][3] = 1.0;
+      rotate[0][2] = transform[0][2];
+      rotate[1][2] = transform[1][2];
+      rotate[2][2] = transform[2][2];
+      rotate[3][2] = 0.0;
+      
+      rotate[0][3] = 0.0;
+      rotate[1][3] = 0.0;
+      rotate[2][3] = 0.0;
+      rotate[3][3] = 1.0;
       
       MAPLE_FOREACH_BEGIN (MAPLE_FUNC_CONTROLLER, cont_state_t, st)
         if (st->buttons & CONT_START)
 	  quit = 1;
       MAPLE_FOREACH_END ()
       
-      render_torus (1.0, 0.6);
+      /* Render front.  */
+      glBindTexture (GL_TEXTURE_2D, texture[0]);
+      glTexEnvi (GL_TEXTURE_2D, GL_TEXTURE_ENV_MODE, GL_MODULATE);
+      render_torus (1.0, 0.6, 1);
+      
+      glKosFinishList ();
+
+      /* Render back.  */
+      glBindTexture (GL_TEXTURE_2D, texture[1]);
+      glTexEnvi (GL_TEXTURE_2D, GL_TEXTURE_ENV_MODE, GL_MODULATE);
+      glBlendFunc (GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+      render_torus (1.0, 0.6, 0);
       
       glPopMatrix ();
       

@@ -70,13 +70,21 @@ vec_sub (FLOAT_TYPE *dst, FLOAT_TYPE *a, FLOAT_TYPE *b)
 static __inline__ void
 vec_transform (FLOAT_TYPE *dst, FLOAT_TYPE *mat, FLOAT_TYPE *src)
 {
-  dst[0] = mat[0] * src[0] + mat[1] * src[1] + mat[2] * src[2]
-           + mat[3] * src[3];
-  dst[1] = mat[4] * src[0] + mat[5] * src[1] + mat[6] * src[2]
-	   + mat[7] * src[3];
-  dst[2] = mat[8] * src[0] + mat[9] * src[1] + mat[10] * src[2]
-           + mat[11] * src[3];
-  dst[3] = mat[12] * src[0] + mat[13] * src[1] + mat[14] * src[2]
+  dst[0] = mat[0] * src[0]
+           + mat[4] * src[1]
+	   + mat[8] * src[2] 
+	   + mat[12] * src[3];
+  dst[1] = mat[1] * src[0]
+	   + mat[5] * src[1]
+	   + mat[9] * src[2]
+	   + mat[13] * src[3];
+  dst[2] = mat[2] * src[0]
+	   + mat[6] * src[1]
+	   + mat[10] * src[2]
+           + mat[14] * src[3];
+  dst[3] = mat[3] * src[0]
+	   + mat[7] * src[1]
+	   + mat[11] * src[2]
            + mat[15] * src[3];
 }
 
