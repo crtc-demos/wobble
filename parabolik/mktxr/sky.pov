@@ -9,25 +9,68 @@ global_settings { assumed_gamma 2.2 }
 #include "textures.inc"
 #include "stars.inc"
 #include "skies.inc"
+#include "functions.inc"
 
 camera
 {
   orthographic
 #switch (clock)
   #case (1)
-	location  <0.0, 0.5, -1.0>
+	location  <0.0, 0.5, -2.0>
         look_at   <0.0, 0.5, 0.0>
 	up        y
 	right     x
   #break
   #case (2)
-        location  <0.0, 0.5, 1.0>
+        location  <0.0, 0.5, 2.0>
         look_at   <0.0, 0.5, 0.0>
-	up        -y
-	right     -x
+	up        y
+	right     x
   #break
 #end
 }
+
+
+#switch (clock)
+  #case (1)
+
+isosurface
+{
+  function { f_paraboloid (x,y,z, -1) }
+  no_shadow
+  rotate x*90
+  translate <0, 0.5, -1>
+  
+  texture
+  {
+    finish
+    {
+      reflection 1.0
+    }
+  }
+}
+
+  #break
+  #case (2)
+
+isosurface
+{
+  function { f_paraboloid (x,y,z, -1) }
+  no_shadow
+  rotate x*-90
+  translate <0, 0.5, 1>
+  
+  texture
+  {
+    finish
+    {
+      reflection 1.0
+    }
+  }
+}
+
+  #break
+#end
 
 
 
@@ -107,7 +150,8 @@ height_field {
     }
   }
   normal {
-    bumps
+    crackle
+    scale <0.5 1 0.5>
   }
 }
 
@@ -139,6 +183,7 @@ union {
   rotate x*20
   rotate z*10
   translate <40, 30, 90>
+  no_shadow
   pigment {
     color Yellow
   }
