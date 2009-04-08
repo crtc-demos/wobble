@@ -93,9 +93,9 @@ static GLubyte colour[][4] =
 static GLfloat texcoords[][2] =
 {
   { 0.0, 0.0 },
-  { 3.0, 0.0 },
-  { 0.0, 3.0 },
-  { 3.0, 3.0 }
+  { 1.0, 0.0 },
+  { 0.0, 1.0 },
+  { 1.0, 1.0 }
 };
 
 extern uint8 rom[];
@@ -420,7 +420,7 @@ main (int argc, char *argv[])
 
 	  glBegin (GL_TRIANGLE_STRIP);
 
-	  set_bump_direction (t, 2 * M_PI - q, 0.7);
+	  set_bump_direction (t, 2 * M_PI - q, 1.0);
 	  glColor4ub (0, 0, 0, 0);
 
 	  for (strip = 0; strip < 4; strip++)
