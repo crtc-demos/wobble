@@ -9,7 +9,7 @@ global_settings { assumed_gamma 2.2 }
 #include "textures.inc"
 #include "stars.inc"
 #include "skies.inc"
-#include "functions.inc"
+#include "shapes.inc"
 
 camera
 {
@@ -18,61 +18,125 @@ camera
   #case (1)
 	location  <0.0, 0.5, -2.0>
         look_at   <0.0, 0.5, 0.0>
-	up        y
-	right     x
+	up        y*2
+	right     x*2
   #break
   #case (2)
         location  <0.0, 0.5, 2.0>
         look_at   <0.0, 0.5, 0.0>
-	up        y
-	right     x
+	up        -y*2
+	right     -x*2
   #break
 #end
 }
 
+/* Paraboloid_Z, etc. is defined as:
+
+   x^2 + y^2 - z = 0
+   
+   i.e.,
+   
+   x^2 + y^2 = z
+
+   dual-paraboloid environment mapping wants a paraboloid like so:
+   
+   z = 0.5 - 0.5*(x^2 + y^2)
+   
+   (with x^2 + y^2 <= 1)
+   
+   so that the edges of the image correspond to gradient -1/1 & z=0.
+   
+   ignore the constant offset 0.5 (turns into translate), then:
+   
+   z = - (x^2 + y^2)
+*/
 
 #switch (clock)
+
   #case (1)
 
-isosurface
+intersection
 {
-  function { f_paraboloid (x,y,z, -1) }
-  no_shadow
-  rotate x*90
-  translate <0, 0.5, -1>
-  
-  texture
+  object
   {
-    finish
-    {
-      reflection 1.0
-    }
+    Paraboloid_Z
+
+    scale <1, 1, 0.5>
+    translate <0, 0.5, -0.5>
+  }
+ 
+  /*sphere
+  {
+    <0, 0.5, 0>, 1
+  }*/
+
+  no_shadow
+
+  finish
+  {
+    reflection 1.0
   }
 }
-
+  
   #break
+  
   #case (2)
 
-isosurface
+object
 {
-  function { f_paraboloid (x,y,z, -1) }
-  no_shadow
-  rotate x*-90
-  translate <0, 0.5, 1>
+  Paraboloid_Z
   
-  texture
+  scale <1, 1, -0.5>
+  translate <0, 0.5, 0.5>
+  
+  no_shadow
+  
+  finish
   {
-    finish
-    {
-      reflection 1.0
-    }
+    reflection 1.0
   }
 }
 
   #break
 #end
 
+/*sphere {
+  <5, 0.5, 0>, 1
+  
+  pigment
+  {
+    color Yellow
+  }
+  
+  finish
+  {
+    diffuse 0.5
+    specular 1.0
+  }
+}*/
 
+/*
+union
+{
+  cylinder { <-3,  3,  3>, < 3,  3,  3>, 0.2 }
+  cylinder { <-3, -3,  3>, < 3, -3,  3>, 0.2 }
+  cylinder { <-3,  3, -3>, < 3,  3, -3>, 0.2 }
+  cylinder { <-3, -3, -3>, < 3, -3, -3>, 0.2 }
+
+  cylinder { < 3, -3,  3>, < 3,  3,  3>, 0.2 }
+  cylinder { <-3, -3,  3>, <-3,  3,  3>, 0.2 }
+  cylinder { < 3, -3, -3>, < 3,  3, -3>, 0.2 }
+  cylinder { <-3, -3, -3>, <-3,  3, -3>, 0.2 }
+
+  cylinder { < 3,  3, -3>, < 3,  3,  3>, 0.2 }
+  cylinder { <-3,  3, -3>, <-3,  3,  3>, 0.2 }
+  cylinder { < 3, -3, -3>, < 3, -3,  3>, 0.2 }
+  cylinder { <-3, -3, -3>, <-3, -3,  3>, 0.2 }
+  
+  pigment { color <1 0.7 0> }
+  finish { diffuse 0.5 specular 1.0 }
+}
+*/
 
 sky_sphere {
   pigment {
@@ -99,7 +163,7 @@ light_source {
 }
 
 sphere {
-  <40, 30, 90>, 30
+  <40, 60, 90>, 30
   texture {
     pigment {
       granite
@@ -141,17 +205,31 @@ height_field {
   hierarchy on
   scale <2,2,2>
   translate <-1,-0.6,-1>
-  scale <150,20,150>
+  scale <-150,50,-150>
   pigment {
-    bozo
+    agate
+    scale 20
     color_map {
-      [0.0 color rgb <0.7, 0.3, 0>]
-      [1.0 color rgb <0.8, 0.5, 0>]
+      [0.0 color rgb <1.0, 0.0, 0.0>]
+      [1.0 color rgb <1.0, 0.8, 0.0>]
     }
   }
   normal {
-    crackle
-    scale <0.5 1 0.5>
+    granite
+    scale 3
+  }
+}
+
+plane
+{
+  y, -12
+  
+  pigment {
+    color Grey
+  }
+  
+  finish {
+    reflection 0.5
   }
 }
 
@@ -182,7 +260,7 @@ union {
   }
   rotate x*20
   rotate z*10
-  translate <40, 30, 90>
+  translate <40, 60, 90>
   no_shadow
   pigment {
     color Yellow
