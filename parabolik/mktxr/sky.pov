@@ -13,19 +13,71 @@ global_settings { assumed_gamma 2.2 }
 
 camera
 {
-  orthographic
 #switch (clock)
+  /* Parabolic environment map.  */
   #case (1)
+	orthographic
 	location  <0.0, 0.5, -2.0>
         look_at   <0.0, 0.5, 0.0>
 	up        y*2
 	right     x*2
   #break
   #case (2)
+	orthographic
         location  <0.0, 0.5, 2.0>
         look_at   <0.0, 0.5, 0.0>
 	up        -y*2
 	right     -x*2
+  #break
+  
+  /* Sky cube.  */
+  #case (3)
+	location <0, 0, 0>
+	look_at	+x
+	up +y
+	right +z
+	angle 90
+	translate <0, 0.5, 0>
+  #break
+  #case (4)
+	location <0, 0, 0>
+	look_at	-x
+	up -y
+	right +z
+	angle 90
+	translate <0, 0.5, 0>
+  #break
+  #case (5)
+	location <0, 0, 0>
+	look_at	-y
+	up +x
+	right +z
+	angle 90
+	translate <0, 0.5, 0>
+  #break
+  #case (6)
+	location <0, 0, 0>
+	look_at	+y
+	up -x
+	right +z
+	angle 90
+	translate <0, 0.5, 0>
+  #break
+  #case (7)
+	location <0, 0, 0>
+	look_at	+z
+	up +x
+	right +y
+	angle 90
+	translate <0, 0.5, 0>
+  #break
+  #case (8)
+	location <0, 0, 0>
+	look_at	-z
+	up -x
+	right -y
+	angle 90
+	translate <0, 0.5, 0>
   #break
 #end
 }

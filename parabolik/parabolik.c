@@ -12,8 +12,16 @@
 #endif
 
 #include "vector.h"
+#include "distort.h"
+#include "perlin.h"
 
 float eye_pos[3] = { 0.0, 0.0, -4.5 };
+
+/* Blobby thing.  */
+GLfloat ***sphere;
+int nstrip;
+int stripl;
+float blob_phase = 0.0;
 
 #ifdef DREAMCAST_KOS
 extern uint8 romdisk[];
@@ -433,7 +441,7 @@ fake_light (float vertex[3], float normal[3], int front)
   if (front)
     {
       x_f = x;
-      y_f = y;
+      y_f = -y;
       z_f = 1.0 - z;
 
       if (z >= 0.0)
@@ -605,6 +613,141 @@ render_torus (float outer, float inner, int front)
 }
 
 static void
+render_blob (GLfloat ***data, int numstrips, int striplength, int front)
+{
+  int i;
+  
+  grab_transform ();
+  
+  for (i = 0; i < numstrips; i++)
+    {
+      int j;
+      
+      glBegin (GL_TRIANGLE_STRIP);
+      
+      for (j = 0; j < striplength; j++)
+        {
+	  GLfloat v[3], x;
+	  memcpy (v, data[i][j], sizeof (float) * 3);
+	  x = perlin_noise_2D (15 + 3 * v[1] + blob_phase * 0.3,
+			       15 + 2 * v[0] + blob_phase * 0.4, 4) * 0.35;
+	  v[0] += x * 0.5;
+	  v[1] += x * 0.25;
+	  v[2] += x * 0.15;
+	  fake_light (v, data[i][j], front);
+	  glVertex3fv (v);
+	}
+      
+      glEnd ();
+    }
+}
+
+/* This should use real clipping.  */
+static void
+render_cube (GLuint *textures)
+{
+  int i;
+  
+  glColor4ub (255, 255, 255, 0);
+  
+  for (i = 0; i < 6; i++)
+    {
+      int j, k;
+      const float delta = 20.0 / 3.0;
+      
+      glBindTexture (GL_TEXTURE_2D, textures[i]);
+      for (j = 0; j < 3; j++)
+        {
+	  float jl = (float) j / 3.0;
+	  float jh = (float) (j + 1) / 3.0;
+
+          for (k = 0; k < 3; k++)
+	    {
+	      float kl = (float) k / 3.0;
+	      float kh = (float) (k + 1) / 3.0;
+	      float x = 0, y = 0, z = 0;
+	      float jx = 0, jy = 0, jz = 0;
+	      float kx = 0, ky = 0, kz = 0;
+
+              /*
+	           5
+	        1     0
+		   4
+		   
+		-->
+		
+		   4
+		0     1
+		   5
+	      */
+
+	      switch (i)
+	        {
+		case 1:
+		  x = 10;
+		  y = kl * 20 - 10;
+		  z = jl * 20 - 10;
+		  jz = delta;
+		  ky = delta;
+		  break;
+		
+		case 0:
+		  x = -10;
+		  y = kl * 20 - 10;
+		  z = 10 - jl * 20;
+		  jz = -delta;
+		  ky = delta;
+		  break;
+
+		case 2:
+                  x = kl * 20 - 10;
+		  y = -10;
+		  z = jl * 20 - 10;
+		  jz = delta;
+		  kx = delta;
+		  break;
+		
+		case 3:
+                  x = 10 - kl * 20;
+		  y = 10;
+		  z = jl * 20 - 10;
+		  jz = delta;
+		  kx = -delta;
+		  break;
+		
+		case 5:
+                  x = 10 - jl * 20;
+		  y = kl * 20 - 10;
+		  z = 10;
+		  jx = -delta;
+		  ky = delta;
+		  break;
+
+		case 4:
+                  x = jl * 20 - 10;
+		  y = kl * 20 - 10;
+		  z = -10;
+		  jx = delta;
+		  ky = delta;
+		  break;
+		}
+
+	      glBegin (GL_QUADS);
+	      glTexCoord2f (jl, 1.0 - kl);
+	      glVertex3f (x, y, z);
+	      glTexCoord2f (jh, 1.0 - kl);
+	      glVertex3f (x + jx, y + jy, z + jz);
+	      glTexCoord2f (jh, 1.0 - kh);
+	      glVertex3f (x + jx + kx, y + jy + ky, z + jz + kz);
+	      glTexCoord2f (jl, 1.0 - kh);
+	      glVertex3f (x + kx, y + ky, z + kz);
+	      glEnd ();
+	    }
+	}
+    }
+}
+
+static void
 init_pvr (void)
 {
   pvr_init_params_t params = {
@@ -628,8 +771,9 @@ main (int argc, char* argv[])
   float rot1 = 0.0, rot2 = 0.0, rot3 = 0.0;
   kos_img_t front_txr, back_txr;
   pvr_ptr_t texaddr;
-  GLuint texture[2];
-  int blendfunc = 0;
+  GLuint texture[8];
+  int blendfunc = 2;
+  float eye_rot = 0;
   
   cable_type = vid_check_cable ();
   
@@ -641,18 +785,20 @@ main (int argc, char* argv[])
   init_pvr ();
 
   glKosInit ();
+
+  sphere = mkspheredata (3, &nstrip, &stripl);
   
-  png_to_img ("/rd/front4a.png", PNG_MASK_ALPHA, &front_txr);
+  png_to_img ("/rd/sky1.png", PNG_MASK_ALPHA, &front_txr);
   texaddr = pvr_mem_malloc (front_txr.w * front_txr.h * 2);
   pvr_txr_load_kimg (&front_txr, texaddr, PVR_TXRLOAD_INVERT_Y);
   kos_img_free (&front_txr, 0);
   
-  glGenTextures (2, &texture[0]);
+  glGenTextures (8, &texture[0]);
   
   glBindTexture (GL_TEXTURE_2D, texture[0]);
   glKosTex2D (GL_ARGB1555_TWID, front_txr.w, front_txr.h, texaddr);
 
-  png_to_img ("/rd/back4a.png", PNG_MASK_ALPHA, &back_txr);
+  png_to_img ("/rd/sky2o.png", PNG_MASK_ALPHA, &back_txr);
   texaddr = pvr_mem_malloc (back_txr.w * back_txr.h * 2);
   pvr_txr_load_kimg (&back_txr, texaddr, PVR_TXRLOAD_INVERT_Y);
   kos_img_free (&back_txr, 0);
@@ -665,6 +811,36 @@ main (int argc, char* argv[])
 
   glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
   glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
+  
+  glBindTexture (GL_TEXTURE_2D, texture[2]);
+  texaddr = pvr_mem_malloc (256 * 256 * 2);
+  png_to_texture ("/rd/sky3.png", texaddr, PNG_NO_ALPHA);
+  glKosTex2D (GL_RGB565_TWID, 256, 256, texaddr);
+
+  glBindTexture (GL_TEXTURE_2D, texture[3]);
+  texaddr = pvr_mem_malloc (256 * 256 * 2);
+  png_to_texture ("/rd/sky4.png", texaddr, PNG_NO_ALPHA);
+  glKosTex2D (GL_RGB565_TWID, 256, 256, texaddr);
+
+  glBindTexture (GL_TEXTURE_2D, texture[4]);
+  texaddr = pvr_mem_malloc (256 * 256 * 2);
+  png_to_texture ("/rd/sky5.png", texaddr, PNG_NO_ALPHA);
+  glKosTex2D (GL_RGB565_TWID, 256, 256, texaddr);
+
+  glBindTexture (GL_TEXTURE_2D, texture[5]);
+  texaddr = pvr_mem_malloc (256 * 256 * 2);
+  png_to_texture ("/rd/sky6.png", texaddr, PNG_NO_ALPHA);
+  glKosTex2D (GL_RGB565_TWID, 256, 256, texaddr);
+
+  glBindTexture (GL_TEXTURE_2D, texture[6]);
+  texaddr = pvr_mem_malloc (256 * 256 * 2);
+  png_to_texture ("/rd/sky7.png", texaddr, PNG_NO_ALPHA);
+  glKosTex2D (GL_RGB565_TWID, 256, 256, texaddr);
+
+  glBindTexture (GL_TEXTURE_2D, texture[7]);
+  texaddr = pvr_mem_malloc (256 * 256 * 2);
+  png_to_texture ("/rd/sky8.png", texaddr, PNG_NO_ALPHA);
+  glKosTex2D (GL_RGB565_TWID, 256, 256, texaddr);
   
   glEnable (GL_DEPTH_TEST);
   glEnable (GL_CULL_FACE);
@@ -681,7 +857,6 @@ main (int argc, char* argv[])
 		  50.0);		/* Z far.  */
 
   glMatrixMode (GL_MODELVIEW);
-  
   
   while (!quit)
     {
@@ -721,6 +896,8 @@ main (int argc, char* argv[])
 	}*/
 
       glKosBeginFrame ();
+
+      render_cube (&texture[2]);
       
       glPushMatrix ();
       
@@ -739,7 +916,15 @@ main (int argc, char* argv[])
 
       if (rot2 >= 360)
         rot2 -= 360;
-                  
+      
+      eye_rot += 0.05;
+      if (eye_rot >= 2 * M_PI)
+        eye_rot -= 2 * M_PI;
+      
+      blob_phase += 0.05;
+      if (blob_phase >= 24 * M_PI)
+        blob_phase -= 24 * M_PI;
+      
       MAPLE_FOREACH_BEGIN (MAPLE_FUNC_CONTROLLER, cont_state_t, st)
         {
 	  if (st->buttons & CONT_START)
@@ -747,6 +932,7 @@ main (int argc, char* argv[])
 	  
 	  eye_pos[0] = st->joyx / 25.0;
 	  eye_pos[1] = st->joyy / 25.0;
+	  eye_pos[2] = 5 * sin (eye_rot);
 	  
 	  if (st->buttons & CONT_A)
 	    blendfunc = 0;
@@ -760,8 +946,13 @@ main (int argc, char* argv[])
       /* Render front.  */
       glBindTexture (GL_TEXTURE_2D, texture[0]);
       glTexEnvi (GL_TEXTURE_2D, GL_TEXTURE_ENV_MODE, GL_MODULATE);
+
+      #if 1
+      render_blob (sphere, nstrip, stripl, 0);
+      #else
       render_torus (1.0, 0.6, 1);
-      
+      #endif
+            
       glPushMatrix ();
       glRotatef (rot3, 1.0, 0.0, 0.0);
       glTranslatef (2.9, 0.0, 0.0);
@@ -784,7 +975,14 @@ main (int argc, char* argv[])
         glBlendFunc (GL_ZERO, GL_ONE_MINUS_SRC_ALPHA);
       else
         glBlendFunc (GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+	
+      #if 1
+      //glDisable (GL_TEXTURE_2D);
+      render_blob (sphere, nstrip, stripl, 0);
+      //glEnable (GL_TEXTURE_2D);
+      #else
       render_torus (1.0, 0.6, 0);
+      #endif
 
       glPushMatrix ();
       glRotatef (rot3, 1.0, 0.0, 0.0);
