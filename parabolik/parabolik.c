@@ -15,7 +15,11 @@
 #include "distort.h"
 #include "perlin.h"
 
-float eye_pos[3] = { 0.0, 0.0, -4.5 };
+int draw_vectors = 100;
+
+float eye_pos[4] = { 0.0, 0.0, 0.0, 1.0 };
+
+extern uint16 *vram_s;
 
 /* Blobby thing.  */
 GLfloat ***sphere;
@@ -82,7 +86,7 @@ void setup_texture_matrix(int front)
   };
   GLfloat mv[16], ilmv[16];
 
-  glGetFloatv(GL_MODELVIEW_MATRIX, mv);  
+  glGetFloatv(GL_MODELVIEW_MATRIX, mv);
   mv[3]  = 0;
   mv[7]  = 0;
   mv[11] = 0;
@@ -362,47 +366,127 @@ static matrix_t camera __attribute__((aligned(32)));
 static matrix_t invcamera __attribute__((aligned(32)));
 static matrix_t transform __attribute__((aligned(32)));
 static matrix_t rotate __attribute__((aligned(32)));
+static matrix_t projection __attribute__((aligned(32)));
+static matrix_t modelview __attribute__((aligned(32)));
 
 static void
-fake_light (float vertex[3], float normal[3], int front)
+crap_box (int x, int y, int colour)
 {
-  float light[3] = { 0.2357, 0.2357, 0.9428 };
+  int i, j;
+  
+  for (j = 0; j < 2; j++)
+   for (i = 0; i < 2; i++)
+     vram_s[(y + j) * 640 + x + i] = colour;
+}
+
+static void
+box (float *vertex, int colour)
+{
+  float xx_vertex[4];
+
+  glGetFloatv (GL_PROJECTION_MATRIX, &projection[0][0]);
+  glGetFloatv (GL_MODELVIEW_MATRIX, &modelview[0][0]);
+
+  //vec_mat_apply (&tmp[0], &projection[0][0], &modelview[0][0]);
+  
+  //vec_transform (x_vertex, (float *) &modelview[0][0], vertex);
+  vec_transform (xx_vertex, (float *) &projection[0][0], vertex);
+  
+  xx_vertex[0] = 320 + 320 * (xx_vertex[0] / xx_vertex[3]) - 1;
+  xx_vertex[1] = 240 - 240 * (xx_vertex[1] / xx_vertex[3]) - 1;
+  xx_vertex[2] = xx_vertex[2] / xx_vertex[3];
+  
+  if (xx_vertex[0] >= 0 && xx_vertex[0] < (640 - 2)
+      && xx_vertex[1] >= 0 && xx_vertex[1] < (480 - 2)
+      && xx_vertex[2] > 0)
+    crap_box (xx_vertex[0], xx_vertex[1], colour);
+}
+
+static void
+parabolic_texcoords (float *texc, float vertex[3], float normal[3], int front)
+{
+  //float light[3] = { 0.2357, 0.2357, 0.9428 };
   float vertex4[4], x_vertex[4], x_normal[4];
   float eye_to_vertex[3], reflection[4], tmp[3];
+  float temp[4], along;
   float eye_norm_dot;
   float incidence, normalized_normal[4];
   int r, g, b;
   GLfloat unrot[4], x, y, z;
   float x_f, y_f, z_f;
   float x_b, y_b, z_b;
-  
+  float c_eyepos[4];
+
   vec_normalize (normalized_normal, normal);
 
   /* Find the normal in eye space.  */
-  normalized_normal[3] = 0.0;
+  normalized_normal[3] = 1.0;
   vec_transform (x_normal, (float *) &rotate[0][0], normalized_normal);
 
-  incidence = vec_dot (&light[0], &x_normal[0]);
+ /* incidence = vec_dot (&light[0], &x_normal[0]);
   
   if (incidence < 0)
-    incidence = 0;
+    incidence = 0;*/
   
-  r = 64 + 191 * incidence;
+  /*r = 64 + 191 * incidence;
   g = 64 + 191 * incidence;
   b = 64 + 191 * incidence;
   
   glColor4ub (r, g, b, 0);
+  glColor4ub (255, 255, 255, 0);*/
   
   /* We need the vertex in eye space.  This duplicates work!  */
   memcpy (vertex4, vertex, sizeof (float) * 3);
-  vertex4[3] = 0.0;
+  vertex4[3] = 1.0;
   vec_transform (x_vertex, (float *) &transform[0][0], vertex4);
-  vec_sub (eye_to_vertex, x_vertex, eye_pos);
+
+  vec_transform (&c_eyepos[0], &camera[0][0], &eye_pos[0]);
+  vec_sub (eye_to_vertex, &c_eyepos[0], &x_vertex[0]);
   vec_normalize (eye_to_vertex, eye_to_vertex);
   
-  eye_norm_dot = vec_dot (eye_to_vertex, x_normal);
-  vec_scale (tmp, x_normal, -eye_norm_dot * 2.0);
-  vec_add (reflection, eye_to_vertex, tmp);
+  eye_norm_dot = vec_dot (eye_to_vertex, &x_normal[0]);
+  vec_scale (tmp, x_normal, 2.0 * eye_norm_dot);
+
+  vec_sub (reflection, tmp, eye_to_vertex);
+  
+  //dbgio_printf ("ref length: %f\n", (double) vec_length (reflection));
+
+#if 0
+  if (draw_vectors > 0)
+    {
+     /* dbgio_printf ("%f %f %f\n", (double) eye_to_vertex[0],
+				  (double) eye_to_vertex[1],
+				  (double) eye_to_vertex[2]); */
+
+      dbgio_printf ("e2v . norm = %f  norm . refl = %f\n",
+        (double) eye_norm_dot, (double) vec_dot (x_normal, reflection));
+
+      for (along = 0.0; along < 0.25; along += 0.005)
+	{
+	  int colour = 0x001f | ((int) (along * 255) << 5);
+	  vec_scale (temp, x_normal, along);
+	  vec_add (&temp[0], x_vertex, &temp[0]);
+	  box (temp, colour);
+	}
+
+      for (along = 0.0; along < 0.25; along += 0.005)
+	{
+	  int colour = 0xf800 | ((int) (along * 255) << 5);
+
+	  /*vec_scale (temp, eye_to_vertex, along);
+	  vec_add (&temp[0], x_vertex, &temp[0]);
+	  box (temp, colour);*/
+
+	  colour &= ~0xf800;
+
+	  vec_scale (temp, reflection, along);
+	  vec_add (&temp[0], x_vertex, &temp[0]);
+	  box (temp, colour);
+	}
+      draw_vectors--;
+    }
+#endif
+
   /*x = reflection[0];
   y = reflection[1];
   z = reflection[2];
@@ -410,7 +494,7 @@ fake_light (float vertex[3], float normal[3], int front)
   mat_load ((matrix_t *) &unrotate[0][0]);
   mat_trans_nodiv (x, y, z, w);
   glKosMatrixDirty ();*/
-  reflection[3] = 0.0;
+  reflection[3] = 1.0;
   vec_transform (unrot, (float *) &invcamera[0][0], reflection);
   x = unrot[0];
   y = unrot[1];
@@ -442,29 +526,33 @@ fake_light (float vertex[3], float normal[3], int front)
     {
       x_f = x;
       y_f = -y;
-      z_f = 1.0 - z;
+      z_f = -1.0 - z;
 
-      if (z >= 0.0)
-        z = -0.0001;
+      /*if (z_f >= 0.0)
+        z_f = -0.0001;*/
 
       x_f = 0.5 + 0.5 * (x_f / z_f);
       y_f = 0.5 + 0.5 * (y_f / z_f);
 
-      glTexCoord2f (x_f, y_f);
+      texc[0] = x_f;
+      texc[1] = y_f;
+      texc[2] = z;
     }
   else
     {
       x_b = x;
       y_b = y;
-      z_b = -1.0 - z;
+      z_b = 1.0 - z;
 
-      if (z <= 0.0)
-        z = 0.0001;
+      /*if (z_b <= 0.0)
+        z_b = 0.0001;*/
 
       x_b = 0.5 + 0.5 * (x_b / z_b);
       y_b = 0.5 + 0.5 * (y_b / z_b);
 
-      glTexCoord2f (x_b, y_b);
+      texc[0] = x_b;
+      texc[1] = y_b;
+      texc[2] = z;
     }
 }
 
@@ -551,54 +639,82 @@ render_torus (float outer, float inner, int front)
 	  else
 	    {
 	      int minor_wrapped = (minor == minor_steps) ? 0 : minor;
+	      float texcoords[12];
+	      GLfloat *vptr[4];
+	      int vnum = 0;
 
 	      /* Polygon is formed from:
 	           prev_row[minor-1]  ,-> last_xyz
 		        v            /       v
 		   prev_row[minor] -'	  min_xyz.  */
-	      glBegin (GL_TRIANGLE_STRIP);
 	      
 	      //glColor4ub (255, 255, 255, 0);
-	      fake_light (prev_row[minor - 1][0], prev_row[minor - 1][1],
-			  front);
-	      glVertex3fv ((GLfloat *) &prev_row[minor - 1][0]);
+	      parabolic_texcoords (&texcoords[0],
+				   prev_row[minor - 1][0],
+				   prev_row[minor - 1][1],
+				   front);
+	      vptr[vnum++] = (GLfloat *) &prev_row[minor - 1][0];
 	      
 	      //glColor4ub (255, 0, 0, 0);
-	      fake_light (prev_row[minor][0], prev_row[minor][1], front);
-	      glVertex3fv ((GLfloat *) &prev_row[minor][0]);
+	      parabolic_texcoords (&texcoords[3],
+				   prev_row[minor][0],
+				   prev_row[minor][1],
+				   front);
+	      vptr[vnum++] = (GLfloat *) &prev_row[minor][0];
 	      
 	      if (major == major_steps)
 	        {
 		  //glColor4ub (255, 255, 0, 0);
-		  fake_light (first_row[minor - 1][0], first_row[minor - 1][1],
-			      front);
-		  glVertex3fv ((GLfloat *) &first_row[minor - 1][0]);
+		  parabolic_texcoords (&texcoords[6],
+				       first_row[minor - 1][0],
+				       first_row[minor - 1][1],
+				       front);
+		  vptr[vnum++] = (GLfloat *) &first_row[minor - 1][0];
 		  
 		  //glColor4ub (0, 255, 0, 0);
-		  fake_light (first_row[minor_wrapped][0],
-			      first_row[minor_wrapped][1], front);
-		  glVertex3fv ((GLfloat *) &first_row[minor_wrapped][0]);
+		  parabolic_texcoords (&texcoords[9],
+				       first_row[minor_wrapped][0],
+				       first_row[minor_wrapped][1],
+				       front);
+		  vptr[vnum++] = (GLfloat *) &first_row[minor_wrapped][0];
 		}
 	      else
 	        {
 		  //glColor4ub (255, 255, 0, 0);
-		  fake_light (last[0], last[1], front);
-		  glVertex3fv (&last[0][0]);
+		  parabolic_texcoords (&texcoords[6], last[0], last[1], front);
+		  vptr[vnum++] = &last[0][0];
 
 		  //glColor4ub (0, 255, 0, 0);
 		  if (minor == minor_steps)
 		    {
-		      fake_light (first[0], first[1], front);
-	              glVertex3fv (&first[0][0]);
+		      parabolic_texcoords (&texcoords[9], first[0], first[1],
+					   front);
+		      vptr[vnum++] = &first[0][0];
 		    }
 		  else
 		    {
-		      fake_light (min[0], min[1], front);
-		      glVertex3fv (&min[0][0]);
+		      parabolic_texcoords (&texcoords[9], min[0], min[1],
+					   front);
+		      vptr[vnum++] = &min[0][0];
 		    }
 		}
-	      
-	      glEnd ();
+
+	      if ((front && (texcoords[2] > 0 || texcoords[5] > 0
+			     || texcoords[8] > 0 || texcoords[11] > 0))
+		  || (!front && (texcoords[2] < 0 || texcoords[5] < 0
+				 || texcoords[8] < 0 || texcoords[11] < 0)))
+		{
+		  glBegin (GL_TRIANGLE_STRIP);
+		  glTexCoord2f (texcoords[0], texcoords[1]);
+		  glVertex3fv (vptr[0]);
+		  glTexCoord2f (texcoords[3], texcoords[4]);
+		  glVertex3fv (vptr[1]);
+		  glTexCoord2f (texcoords[6], texcoords[7]);
+		  glVertex3fv (vptr[2]);
+		  glTexCoord2f (texcoords[9], texcoords[10]);
+		  glVertex3fv (vptr[3]);
+		  glEnd ();
+		}
 
 	      memcpy (&prev_row[minor - 1][0][0], &last[0][0],
 		      6 * sizeof (float));
@@ -622,23 +738,37 @@ render_blob (GLfloat ***data, int numstrips, int striplength, int front)
   for (i = 0; i < numstrips; i++)
     {
       int j;
-      
-      glBegin (GL_TRIANGLE_STRIP);
+      float texcoords[3 * striplength];
+      GLfloat v[striplength][3];
+      int all_positive = 1;
+      int all_negative = 1;
       
       for (j = 0; j < striplength; j++)
         {
-	  GLfloat v[3], x;
-	  memcpy (v, data[i][j], sizeof (float) * 3);
-	  x = perlin_noise_2D (15 + 3 * v[1] + blob_phase * 0.3,
-			       15 + 2 * v[0] + blob_phase * 0.4, 4) * 0.35;
-	  v[0] += x * 0.5;
-	  v[1] += x * 0.25;
-	  v[2] += x * 0.15;
-	  fake_light (v, data[i][j], front);
-	  glVertex3fv (v);
+	  GLfloat x;
+	  memcpy (&v[j], data[i][j], sizeof (float) * 3);
+	  x = perlin_noise_2D (15 + 3 * v[j][1] + blob_phase * 0.3,
+			       15 + 2 * v[j][0] + blob_phase * 0.4, 4) * 0.35;
+	  v[j][0] += x * 0.5;
+	  v[j][1] += x * 0.25;
+	  v[j][2] += x * 0.15;
+	  parabolic_texcoords (&texcoords[j * 3], v, data[i][j], front);
+	  if (texcoords[j * 3 + 2] < 0)
+	    all_positive = 0;
+	  if (texcoords[j * 3 + 2] > 0)
+	    all_negative = 0;
 	}
       
-      glEnd ();
+      if ((front && !all_negative) || (!front && !all_positive))
+        {
+	  glBegin (GL_TRIANGLE_STRIP);
+          for (j = 0; j < striplength; j++)
+	    {
+	      glTexCoord2f (texcoords[j * 3], texcoords[j * 3 + 1]);
+	      glVertex3fv (&v[j][0]);
+	    }
+	  glEnd ();
+	}
     }
 }
 
@@ -646,6 +776,7 @@ render_blob (GLfloat ***data, int numstrips, int striplength, int front)
 static void
 render_cube (GLuint *textures)
 {
+#define CUBE_SCALE 100
   int i;
   
   glColor4ub (255, 255, 255, 0);
@@ -653,7 +784,7 @@ render_cube (GLuint *textures)
   for (i = 0; i < 6; i++)
     {
       int j, k;
-      const float delta = 20.0 / 3.0;
+      const float delta = 2 * CUBE_SCALE / 3.0;
       
       glBindTexture (GL_TEXTURE_2D, textures[i]);
       for (j = 0; j < 3; j++)
@@ -669,64 +800,52 @@ render_cube (GLuint *textures)
 	      float jx = 0, jy = 0, jz = 0;
 	      float kx = 0, ky = 0, kz = 0;
 
-              /*
-	           5
-	        1     0
-		   4
-		   
-		-->
-		
-		   4
-		0     1
-		   5
-	      */
-
 	      switch (i)
 	        {
 		case 1:
-		  x = 10;
-		  y = kl * 20 - 10;
-		  z = jl * 20 - 10;
+		  x = CUBE_SCALE;
+		  y = kl * 2 * CUBE_SCALE - CUBE_SCALE;
+		  z = jl * 2 * CUBE_SCALE - CUBE_SCALE;
 		  jz = delta;
 		  ky = delta;
 		  break;
 		
 		case 0:
-		  x = -10;
-		  y = kl * 20 - 10;
-		  z = 10 - jl * 20;
+		  x = -CUBE_SCALE;
+		  y = kl * 2 * CUBE_SCALE - CUBE_SCALE;
+		  z = CUBE_SCALE - jl * 2 * CUBE_SCALE;
 		  jz = -delta;
 		  ky = delta;
 		  break;
 
 		case 2:
-                  x = kl * 20 - 10;
-		  y = -10;
-		  z = jl * 20 - 10;
+                  x = kl * 2 * CUBE_SCALE - CUBE_SCALE;
+		  y = -CUBE_SCALE;
+		  z = jl * 2 * CUBE_SCALE - CUBE_SCALE;
 		  jz = delta;
 		  kx = delta;
 		  break;
 		
 		case 3:
-                  x = 10 - kl * 20;
-		  y = 10;
-		  z = jl * 20 - 10;
+                  x = CUBE_SCALE - kl * 2 * CUBE_SCALE;
+		  y = CUBE_SCALE;
+		  z = jl * 2 * CUBE_SCALE - CUBE_SCALE;
 		  jz = delta;
 		  kx = -delta;
 		  break;
 		
 		case 5:
-                  x = 10 - jl * 20;
-		  y = kl * 20 - 10;
-		  z = 10;
+                  x = CUBE_SCALE - jl * 2 * CUBE_SCALE;
+		  y = kl * 2 * CUBE_SCALE - CUBE_SCALE;
+		  z = CUBE_SCALE;
 		  jx = -delta;
 		  ky = delta;
 		  break;
 
 		case 4:
-                  x = jl * 20 - 10;
-		  y = kl * 20 - 10;
-		  z = -10;
+                  x = jl * 2 * CUBE_SCALE - CUBE_SCALE;
+		  y = kl * 2 * CUBE_SCALE - CUBE_SCALE;
+		  z = -CUBE_SCALE;
 		  jx = delta;
 		  ky = delta;
 		  break;
@@ -745,6 +864,7 @@ render_cube (GLuint *textures)
 	    }
 	}
     }
+#undef CUBE_SCALE
 }
 
 static void
@@ -774,7 +894,7 @@ main (int argc, char* argv[])
   GLuint texture[8];
   int blendfunc = 2;
   float eye_rot = 0;
-  
+
   cable_type = vid_check_cable ();
   
   if (cable_type == CT_VGA)
@@ -860,6 +980,26 @@ main (int argc, char* argv[])
   
   while (!quit)
     {
+      MAPLE_FOREACH_BEGIN (MAPLE_FUNC_CONTROLLER, cont_state_t, st)
+        {
+	  if (st->buttons & CONT_START)
+	    quit = 1;
+	  
+	  eye_pos[0] = st->joyx / 25.0;
+	  eye_pos[1] = st->joyy / 25.0;
+	  eye_pos[2] = 5 * sin (eye_rot);
+	  
+	  if (st->buttons & CONT_A)
+	    blendfunc = 0;
+	  else if (st->buttons & CONT_B)
+	    blendfunc = 1;
+	  else if (st->buttons & CONT_X)
+	    blendfunc = 2;
+	}
+      MAPLE_FOREACH_END ()
+      
+      draw_vectors = 10;
+      
       glLoadIdentity ();
       gluLookAt (eye_pos[0], eye_pos[1], eye_pos[2],	/* Eye position.  */
 		 0.0,   0.0,   0.0,			/* Centre.  */
@@ -887,6 +1027,11 @@ main (int argc, char* argv[])
       invcamera[3][2] = 0.0;
       invcamera[3][3] = 1.0;
 
+      /*dbgio_printf ("inverted camera orthogonality: %f %f %f\n",
+		    (double) vec_dot (invcamera[0], invcamera[1]),
+		    (double) vec_dot (invcamera[1], invcamera[2]),
+		    (double) vec_dot (invcamera[2], invcamera[0]));*/
+
       /*dbgio_printf ("Inverted camera matrix:\n");
       for (i = 0; i < 4; i++)
 	{
@@ -897,7 +1042,10 @@ main (int argc, char* argv[])
 
       glKosBeginFrame ();
 
+      /*glPushMatrix ();
+      glTranslatef (-camera[3][0], -camera[3][1], -camera[3][2]);*/
       render_cube (&texture[2]);
+      /*glPopMatrix ();*/
       
       glPushMatrix ();
       
@@ -925,30 +1073,12 @@ main (int argc, char* argv[])
       if (blob_phase >= 24 * M_PI)
         blob_phase -= 24 * M_PI;
       
-      MAPLE_FOREACH_BEGIN (MAPLE_FUNC_CONTROLLER, cont_state_t, st)
-        {
-	  if (st->buttons & CONT_START)
-	    quit = 1;
-	  
-	  eye_pos[0] = st->joyx / 25.0;
-	  eye_pos[1] = st->joyy / 25.0;
-	  eye_pos[2] = 5 * sin (eye_rot);
-	  
-	  if (st->buttons & CONT_A)
-	    blendfunc = 0;
-	  else if (st->buttons & CONT_B)
-	    blendfunc = 1;
-	  else if (st->buttons & CONT_X)
-	    blendfunc = 2;
-	}
-      MAPLE_FOREACH_END ()
-      
       /* Render front.  */
       glBindTexture (GL_TEXTURE_2D, texture[0]);
       glTexEnvi (GL_TEXTURE_2D, GL_TEXTURE_ENV_MODE, GL_MODULATE);
 
       #if 1
-      render_blob (sphere, nstrip, stripl, 0);
+      render_blob (sphere, nstrip, stripl, 1);
       #else
       render_torus (1.0, 0.6, 1);
       #endif

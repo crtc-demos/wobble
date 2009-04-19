@@ -1,6 +1,6 @@
 
 	CC =		kos-cc
-	CFLAGS =	-O2
+	CFLAGS =	-O3
 	STRIP =		kos-strip
 	DEPFLAGS =	-DDREAMCAST_KOS -D_arch_dreamcast
 	GENROMFS =	$(KOS_GENROMFS)
@@ -30,8 +30,13 @@ $(TARGET):	$(OBJS)
 	$(STRIP) $(TARGET)
 
 .PHONY: $(ROMDISK)
-$(ROMDISK):
-	$(GENROMFS) -f $@ -d imagedir
+$(ROMDISK): imagedir_clean
+	$(GENROMFS) -f $@ -d imagedir_clean
+
+.PHONY: imagedir_clean
+imagedir_clean:
+	rm -rf imagedir_clean
+	rsync -Pav --exclude='.svn' imagedir/ imagedir_clean
 
 romdisk.o:	$(ROMDISK)
 	$(KOS_BASE)/utils/bin2o/bin2o romdisk.img romdisk romdisk.o

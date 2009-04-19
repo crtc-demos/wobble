@@ -70,24 +70,6 @@ vec_sub (FLOAT_TYPE *dst, FLOAT_TYPE *a, FLOAT_TYPE *b)
 static __inline__ void
 vec_transform (FLOAT_TYPE *dst, FLOAT_TYPE *mat, FLOAT_TYPE *src)
 {
-#if 0
-  dst[0] = mat[0] * src[0]
-           + mat[1] * src[1]
-	   + mat[2] * src[2] 
-	   + mat[3] * src[3];
-  dst[1] = mat[4] * src[0]
-	   + mat[5] * src[1]
-	   + mat[6] * src[2]
-	   + mat[7] * src[3];
-  dst[2] = mat[8] * src[0]
-	   + mat[9] * src[1]
-	   + mat[10] * src[2]
-           + mat[11] * src[3];
-  dst[3] = mat[12] * src[0]
-	   + mat[13] * src[1]
-	   + mat[14] * src[2]
-           + mat[15] * src[3];
-#else
   dst[0] = mat[0] * src[0]
            + mat[4] * src[1]
 	   + mat[8] * src[2] 
@@ -104,7 +86,36 @@ vec_transform (FLOAT_TYPE *dst, FLOAT_TYPE *mat, FLOAT_TYPE *src)
 	   + mat[7] * src[1]
 	   + mat[11] * src[2]
            + mat[15] * src[3];
-#endif
+}
+
+static __inline__ void
+vec_transform_post (FLOAT_TYPE *dst, FLOAT_TYPE *src, FLOAT_TYPE *mat)
+{
+  dst[0] = mat[0] * src[0]
+           + mat[1] * src[1]
+	   + mat[2] * src[2] 
+	   + mat[3] * src[3];
+  dst[1] = mat[4] * src[0]
+	   + mat[5] * src[1]
+	   + mat[6] * src[2]
+	   + mat[7] * src[3];
+  dst[2] = mat[8] * src[0]
+	   + mat[9] * src[1]
+	   + mat[10] * src[2]
+           + mat[11] * src[3];
+  dst[3] = mat[12] * src[0]
+	   + mat[13] * src[1]
+	   + mat[14] * src[2]
+           + mat[15] * src[3];
+}
+
+static __inline__ void
+vec_mat_apply (FLOAT_TYPE *dst, FLOAT_TYPE *a, FLOAT_TYPE *b)
+{
+  vec_transform (&dst[0], a, &b[0]);
+  vec_transform (&dst[4], a, &b[4]);
+  vec_transform (&dst[8], a, &b[8]);
+  vec_transform (&dst[12], a, &b[12]);
 }
 
 #endif
