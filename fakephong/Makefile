@@ -1,16 +1,17 @@
 
 	CC =		kos-cc
 	CFLAGS =	-O3
+	INCLUDE =	-I../include
 	STRIP =		kos-strip
 	DEPFLAGS =	-DDREAMCAST_KOS -D_arch_dreamcast
 	GENROMFS =	$(KOS_GENROMFS)
 
-	OBJS =		geosphere.o fakephong.o romdisk.o
+	OBJS =		geosphere.o restrip.o fakephong.o romdisk.o
 	ROMDISK =	romdisk.img
 
 	TARGET =	fakephong.elf
 
-	SRC =		geosphere.c fakephong.c
+	SRC =		geosphere.c restrip.c fakephong.c
 
 .PHONY:	.depend
 
@@ -48,7 +49,7 @@ romdisk.d:
 	$(CC) $(CFLAGS) $(INCLUDE) -DDREAMCAST_KOS -c $< -o $@
 
 %.d:    %.c
-	$(CC) $(CFLAGS) -MM $< > $@
+	$(CC) $(CFLAGS) $(INCLUDE) -MM $< > $@
 
 .depend:	Makefile.dc $(SRC)
 	$(KOS_CC) $(DEPFLAGS) $(INCLUDE) -MM $(SRC) > .depend
