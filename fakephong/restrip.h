@@ -4,7 +4,8 @@
 typedef struct strip
 {
   float (*start)[][3];
-  /* Negative length for inverted strips?  */
+  /* Length is negative for inverted strips.  Send, e.g., first vertex twice
+     when rendering.  */
   int length;
   void *extra;
   size_t extra_elsize;

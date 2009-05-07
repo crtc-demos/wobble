@@ -6,12 +6,12 @@
 	DEPFLAGS =	-DDREAMCAST_KOS -D_arch_dreamcast
 	GENROMFS =	$(KOS_GENROMFS)
 
-	OBJS =		perlin.o distort.o parabolik.o transform.o romdisk.o
+	OBJS =		waves.o romdisk.o
 	ROMDISK =	romdisk.img
 
-	TARGET = parabolik.elf
+	TARGET =	waves.elf
 
-	SRC =		perlin.c distort.c parabolik.c transform.c
+	SRC =		waves.c
 
 .PHONY:	.depend
 

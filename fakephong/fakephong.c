@@ -90,7 +90,7 @@ render_highlight (float hardness)
 	
 	reflection[0] = (x - 127.5) / 127.5;
 	reflection[1] = (y - 127.5) / 127.5;
-	reflection[2] = sqrtf (1.0 - reflection[0] * reflection[0]
+	reflection[2] = fsqrt (1.0 - reflection[0] * reflection[0]
 			       - reflection[1] * reflection[1]);
 	
 	dot = vec_dot (reflection, norm);
@@ -118,7 +118,7 @@ set_grey_palette (void)
     {
       unsigned int palentry;
       
-      /* White with variable alpha.  */
+      /* Grey ramp with solid alpha.  */
       palentry = 0xff000000 | (i << 16) | (i << 8) | i;
       pvr_set_pal_entry (i, palentry);
     }
@@ -387,6 +387,11 @@ render_geosphere (strip *strips, int pass)
 	  invert = 1;
 	}
 
+#if 0
+      if (pass == 1 && (rand () & 31) < 16)
+        continue;
+#endif
+
       glBegin (GL_TRIANGLE_STRIP);
       
       for (sidx = 0; sidx < strip_length; sidx++)
@@ -424,7 +429,7 @@ init_pvr (void)
       PVR_BINSIZE_16 },	/* Punch-thrus.  */
     512 * 1024,		/* Vertex buffer size 512K.  */
     0,			/* No DMA.  */
-    0			/* No FSAA.  */
+    1			/* No FSAA.  */
   };
   
   pvr_init (&params);
@@ -472,6 +477,8 @@ main (int argc, char *argv[])
   
   init_pvr ();
   glKosInit ();
+  
+  glViewport (0, 0, 1280, 480);
   
   glEnable (GL_DEPTH_TEST);
   glEnable (GL_CULL_FACE);
@@ -543,7 +550,7 @@ main (int argc, char *argv[])
       if (rot1 > 2 * M_PI)
         rot1 -= 2 * M_PI;
       
-      rot2 += 0.21;
+      rot2 += 0.18;
       if (rot2 > 2 * M_PI)
         rot2 -= 2 * M_PI;
       

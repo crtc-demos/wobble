@@ -748,7 +748,7 @@ render_blob (GLfloat ***data, int numstrips, int striplength, int front)
 	  GLfloat x;
 	  memcpy (&v[j], data[i][j], sizeof (float) * 3);
 	  x = perlin_noise_2D (15 + 3 * v[j][1] + blob_phase * 0.3,
-			       15 + 2 * v[j][0] + blob_phase * 0.4, 4) * 0.35;
+			       15 + 2 * v[j][0] + blob_phase * 0.4, 1) * 0.35;
 	  v[j][0] += x * 0.5;
 	  v[j][1] += x * 0.25;
 	  v[j][2] += x * 0.15;

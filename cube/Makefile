@@ -2,6 +2,7 @@
 	CC = 		kos-cc
 	STRIP =		$(KOS_STRIP)
 	CFLAGS =	-O2 -Wall
+	INCLUDE =	-I../include
 	DEPFLAGS =
 	LIBS =		-lgl -lpng -lz -lm -lkosutils
 	GENROMFS =	$(KOS_GENROMFS)
@@ -45,7 +46,7 @@ rom.d:
 	$(CC) $(CFLAGS) $(INCLUDE) -c $< -o $@
 
 %.d:	%.c
-	$(CC) $(CFLAGS) -MM $< > $@
+	$(CC) $(CFLAGS) $(INCLUDE) -MM $< > $@
 
 ifneq ($(MAKECMDGOALS),clean)
 ifneq ($(MAKECMDGOALS),cleaner)

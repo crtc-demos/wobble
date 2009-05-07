@@ -297,7 +297,7 @@ void mangle(GLfloat*** data, int numstrips, int striplength, GLfloat offx,
       n[0] += offx;
       n[1] += offy;
       n[2] += offz;
-      x = perlin_noise_2D(15+3*n[1]+rot*0.3, 15+2*n[0]+rot*0.4, 4)*0.35;
+      x = perlin_noise_2D(15+3*n[1]+rot*0.3, 15+2*n[0]+rot*0.4, 1)*0.35;
       n[0] += x * 0.5;
       n[1] += x * 0.25;
       n[2] += x * 0.15;

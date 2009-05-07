@@ -5,6 +5,8 @@
 
 #include <kos.h>
 
+#include "vector.h"
+
 #include <GL/gl.h>
 #include <GL/glu.h>
 
@@ -161,64 +163,6 @@ init_pvr (void)
   pvr_init (&params);
 }
 
-static void
-normalize (GLfloat *vec)
-{
-  GLfloat factor = 1.0 / fsqrt (vec[0] * vec[0] + vec[1] * vec[1]
-				+ vec[2] * vec[2]);
-  vec[0] *= factor;
-  vec[1] *= factor;
-  vec[2] *= factor;
-}
-
-static GLfloat
-length (GLfloat *vec)
-{
-  return fsqrt (vec[0] * vec[0] + vec[1] * vec[1] + vec[2] * vec[2]);
-}
-
-/* Maybe there's an instruction to help with this?  */
-static void
-cross (GLfloat *dst, GLfloat *a, GLfloat *b)
-{
-  GLfloat dstc[3];
-  
-  dstc[0] = a[1] * b[2] - a[2] * b[1];
-  dstc[1] = a[2] * b[0] - a[0] * b[2];
-  dstc[2] = a[0] * b[1] - a[1] * b[0];
-  dst[0] = dstc[0]; dst[1] = dstc[1]; dst[2] = dstc[2];
-}
-
-static GLfloat
-dot (GLfloat *a, GLfloat *b)
-{
-  return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
-}
-
-static void
-scale (GLfloat *dst, GLfloat *src, GLfloat scale)
-{
-  dst[0] = src[0] * scale;
-  dst[1] = src[1] * scale;
-  dst[2] = src[2] * scale;
-}
-
-static void
-add (GLfloat *dst, GLfloat *a, GLfloat *b)
-{
-  dst[0] = a[0] + b[0];
-  dst[1] = a[1] + b[1];
-  dst[2] = a[2] + b[2];
-}
-
-static void
-sub (GLfloat *dst, GLfloat *a, GLfloat *b)
-{
-  dst[0] = a[0] - b[0];
-  dst[1] = a[1] - b[1];
-  dst[2] = a[2] - b[2];
-}
-
 static matrix_t objmatrix __attribute__((aligned(32)));
 
 int
@@ -234,7 +178,7 @@ main (int argc, char *argv[])
   /* Consider this as the vector from the object to the light, for now.  */
   GLfloat light_position[3] = { 0.7, 0.7, 2.0 };
   
-  normalize (&light_position[0]);
+  vec_normalize (&light_position[0], &light_position[0]);
   
   cable_type = vid_check_cable ();
   
@@ -381,7 +325,8 @@ main (int argc, char *argv[])
 	  GLfloat s_dot_n, f[3], d[3], t, q;
 	  GLfloat d_cross_r[3], dxr_len, d_len;
 
-	  s_dot_n = dot (&transformed_normals[faces][0], &light_position[0]);
+	  s_dot_n = vec_dot (&transformed_normals[faces][0],
+			     &light_position[0]);
 	  /* Elevation (T) angle:
 	     s.n = |s| |n| cos T
 	     T = acos (s.n / (|s| * |n|))
@@ -394,18 +339,19 @@ main (int argc, char *argv[])
 	  /* Rotation (Q) angle:
 	     d x r = (|d| |r| sin Q) n
 	     |d x r| / (|d| |r|) = sin Q.  */
-	  scale (&f[0], &transformed_normals[faces][0], s_dot_n);
-	  sub (&d[0], &light_position[0], &f[0]);
-	  cross (&d_cross_r[0], &d[0], &transformed_orient[faces][0]);
-	  dxr_len = length (&d_cross_r[0]);
-	  d_len = length (&d[0]);
+	  vec_scale (&f[0], &transformed_normals[faces][0], s_dot_n);
+	  vec_sub (&d[0], &light_position[0], &f[0]);
+	  vec_cross (&d_cross_r[0], &d[0], &transformed_orient[faces][0]);
+	  dxr_len = vec_length (&d_cross_r[0]);
+	  d_len = vec_length (&d[0]);
 	  q = asinf (dxr_len / d_len);
 	  
-	  over_pi = dot (&d[0], &transformed_orient[faces][0]) < 0;
+	  over_pi = vec_dot (&d[0], &transformed_orient[faces][0]) < 0;
 	  if (over_pi)
 	    q = M_PI - q;
 
-	  over_2pi = dot (&d_cross_r[0], &transformed_normals[faces][0]) < 0;
+	  over_2pi
+	    = vec_dot (&d_cross_r[0], &transformed_normals[faces][0]) < 0;
 	  if (over_2pi)
 	    q = 2 * M_PI - q;
 

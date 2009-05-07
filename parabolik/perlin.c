@@ -63,6 +63,16 @@ static float cubicxy(float x, float y)
 // this routine is pretty damn inefficient
 float perlin_noise_2D(float x, float y, int oct)
 {
-  return oct==0 ? 0.0 : cubicxy(x, y) +
-    0.5*perlin_noise_2D(x*2.0, y*2.0, oct-1);
+  float acc = 0.0, strength = 1.0;
+  int i;
+
+  for (i = 0; i < oct; i++)
+    {
+      acc += strength * cubicxy (x, y);
+      strength *= 0.5;
+      x *= 2;
+      y *= 2;
+    }
+
+  return acc;
 }
