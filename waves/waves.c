@@ -46,7 +46,6 @@ has equidistant neighbours like this:
 
 float pos[YSIZE][XSIZE];
 float vel[YSIZE][XSIZE];
-float acc[YSIZE][XSIZE];
 float normals[YSIZE][XSIZE][3];
 
 void
@@ -56,18 +55,25 @@ init_grid (void)
   
   for (j = 0; j < YSIZE; j++)
     for (i = 0; i < XSIZE; i++)
-      pos[j][i] = vel[j][i] = acc[j][i] = 0.0;
+      pos[j][i] = vel[j][i] = 0.0;
 }
 
 float rot1 = 0.0;
+float rot2 = 0.0;
 
 void
 update_grid (void)
 {
   const float timestep = 0.05;
+#if 0
   const float spring = 0.17;
   const float mass = 0.04;
   const float drag = 0.0045;
+#else
+  const float spring = 0.17;
+  const float mass = 0.02;
+  const float drag = 0.0045;
+#endif
   int i, j;
 
   const float yfac = sin (M_PI / 3.0);
@@ -75,10 +81,15 @@ update_grid (void)
   const float ihalf = iscale / 2.0;
 
   pos[19][15] = fsin (rot1) / 2;
+  pos[33][47] = fsin (rot2) / 3;
   
-  rot1 += 0.05;
+  rot1 += 0.07;
   if (rot1 > 2 * M_PI)
     rot1 -= 2 * M_PI;
+
+  rot2 += 0.08;
+  if (rot2 > 2 * M_PI)
+    rot2 -= 2 * M_PI;
 
   for (j=1; j<YSIZE-1; j++)
   {
@@ -164,7 +175,7 @@ draw_water (int clockwise)
       float js = (float) j * jscale;
       
       glBegin (GL_TRIANGLE_STRIP);
-      
+
       for (i = 1; i < XSIZE - 2; i++)
         {
 	  float is = (float) i * iscale + (float) j * ihalf;
@@ -176,7 +187,7 @@ draw_water (int clockwise)
 	  set_colour (normals[j + 1][i]);
 	  glVertex3f (is + ihalf, pos[j + 1][i], js + jscale);
 	}
-      
+
       glEnd ();
     }
 
@@ -234,7 +245,7 @@ main (int argc, char *argv[])
 
   glMatrixMode (GL_PROJECTION);
   glLoadIdentity ();
-  gluPerspective (45.0,			/* Field of view in degrees.  */
+  gluPerspective (30.0,			/* Field of view in degrees.  */
 		  640.0 / 480.0,	/* Aspect ratio.  */
 		  1.0,			/* Z near.  */
 		  50.0);		/* Z far.  */
@@ -242,7 +253,7 @@ main (int argc, char *argv[])
   glMatrixMode (GL_MODELVIEW);
   glLoadIdentity ();
   gluLookAt (-0.866, 0.75, -0.5,		/* Eye position.  */
-	      0.866, 0.0,   0.5,		/* Centre.  */
+	      0.866, 0.5,   0.5,		/* Centre.  */
 	      0.0,   1.0,   0.0);		/* Up.  */
 
   init_grid ();
