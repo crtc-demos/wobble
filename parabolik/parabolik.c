@@ -7,6 +7,7 @@
 #ifdef DREAMCAST_KOS
 #include <kos.h>
 #include <png/png.h>
+#include <kmg/kmg.h>
 #else
 #include <GL/glut.h>
 #endif
@@ -26,6 +27,8 @@ GLfloat ***sphere;
 int nstrip;
 int stripl;
 float blob_phase = 0.0;
+
+#define TEXSIZE 512
 
 #ifdef DREAMCAST_KOS
 extern uint8 romdisk[];
@@ -532,7 +535,7 @@ parabolic_texcoords (float *texc, float vertex[3], float normal[3], int front)
         z_f = -0.0001;*/
 
       x_f = 0.5 + 0.5 * (x_f / z_f);
-      y_f = 0.5 + 0.5 * (y_f / z_f);
+      y_f = 0.5 - 0.5 * (y_f / z_f);
 
       texc[0] = x_f;
       texc[1] = y_f;
@@ -548,7 +551,7 @@ parabolic_texcoords (float *texc, float vertex[3], float normal[3], int front)
         z_b = 0.0001;*/
 
       x_b = 0.5 + 0.5 * (x_b / z_b);
-      y_b = 0.5 + 0.5 * (y_b / z_b);
+      y_b = 0.5 - 0.5 * (y_b / z_b);
 
       texc[0] = x_b;
       texc[1] = y_b;
@@ -889,7 +892,7 @@ main (int argc, char* argv[])
 {
   int cable_type, quit = 0;
   float rot1 = 0.0, rot2 = 0.0, rot3 = 0.0;
-  kos_img_t front_txr, back_txr;
+  kos_img_t front_txr, back_txr, tmp_img;
   pvr_ptr_t texaddr;
   GLuint texture[8];
   int blendfunc = 2;
@@ -907,13 +910,74 @@ main (int argc, char* argv[])
   glKosInit ();
 
   sphere = mkspheredata (3, &nstrip, &stripl);
+
+  glGenTextures (8, &texture[0]);
+
+#if 1
+  kmg_to_img ("/rd/sky1.kmg", &front_txr);
+  texaddr = pvr_mem_malloc (front_txr.byte_count);
+  pvr_txr_load_kimg (&front_txr, texaddr, PVR_TXRFMT_VQ_ENABLE);
+  kos_img_free (&front_txr, 0);
   
+  glBindTexture (GL_TEXTURE_2D, texture[0]);
+  glKosTex2D (GL_RGB565_TWID | GL_VQ_ENABLE, front_txr.w, front_txr.h,
+	      texaddr);
+
+  kmg_to_img ("/rd/sky2o.kmg", &back_txr);
+  texaddr = pvr_mem_malloc (back_txr.byte_count);
+  pvr_txr_load_kimg (&back_txr, texaddr, PVR_TXRFMT_VQ_ENABLE);
+  kos_img_free (&back_txr, 0);
+
+  glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
+  glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
+
+  glBindTexture (GL_TEXTURE_2D, texture[1]);
+  glKosTex2D (GL_ARGB4444_TWID | GL_VQ_ENABLE, back_txr.w, back_txr.h, texaddr);
+
+  glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
+  glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
+  
+  glBindTexture (GL_TEXTURE_2D, texture[2]);
+  kmg_to_img ("/rd/sky3.kmg", &tmp_img);
+  texaddr = pvr_mem_malloc (tmp_img.byte_count);
+  pvr_txr_load_kimg (&tmp_img, texaddr, PVR_TXRFMT_VQ_ENABLE);
+  glKosTex2D (GL_RGB565_TWID | GL_VQ_ENABLE, tmp_img.w, tmp_img.h, texaddr);
+
+  glBindTexture (GL_TEXTURE_2D, texture[3]);
+  kmg_to_img ("/rd/sky4.kmg", &tmp_img);
+  texaddr = pvr_mem_malloc (tmp_img.byte_count);
+  pvr_txr_load_kimg (&tmp_img, texaddr, PVR_TXRFMT_VQ_ENABLE);
+  glKosTex2D (GL_RGB565_TWID | GL_VQ_ENABLE, tmp_img.w, tmp_img.h, texaddr);
+
+  glBindTexture (GL_TEXTURE_2D, texture[4]);
+  kmg_to_img ("/rd/sky5.kmg", &tmp_img);
+  texaddr = pvr_mem_malloc (tmp_img.byte_count);
+  pvr_txr_load_kimg (&tmp_img, texaddr, PVR_TXRFMT_VQ_ENABLE);
+  glKosTex2D (GL_RGB565_TWID | GL_VQ_ENABLE, tmp_img.w, tmp_img.h, texaddr);
+
+  glBindTexture (GL_TEXTURE_2D, texture[5]);
+  kmg_to_img ("/rd/sky6.kmg", &tmp_img);
+  texaddr = pvr_mem_malloc (tmp_img.byte_count);
+  pvr_txr_load_kimg (&tmp_img, texaddr, PVR_TXRFMT_VQ_ENABLE);
+  glKosTex2D (GL_RGB565_TWID | GL_VQ_ENABLE, tmp_img.w, tmp_img.h, texaddr);
+
+  glBindTexture (GL_TEXTURE_2D, texture[6]);
+  kmg_to_img ("/rd/sky7.kmg", &tmp_img);
+  texaddr = pvr_mem_malloc (tmp_img.byte_count);
+  pvr_txr_load_kimg (&tmp_img, texaddr, PVR_TXRFMT_VQ_ENABLE);
+  glKosTex2D (GL_RGB565_TWID | GL_VQ_ENABLE, tmp_img.w, tmp_img.h, texaddr);
+
+  glBindTexture (GL_TEXTURE_2D, texture[7]);
+  kmg_to_img ("/rd/sky8.kmg", &tmp_img);
+  texaddr = pvr_mem_malloc (tmp_img.byte_count);
+  pvr_txr_load_kimg (&tmp_img, texaddr, PVR_TXRFMT_VQ_ENABLE);
+  glKosTex2D (GL_RGB565_TWID | GL_VQ_ENABLE, tmp_img.w, tmp_img.h, texaddr);
+
+#else  
   png_to_img ("/rd/sky1.png", PNG_MASK_ALPHA, &front_txr);
   texaddr = pvr_mem_malloc (front_txr.w * front_txr.h * 2);
   pvr_txr_load_kimg (&front_txr, texaddr, PVR_TXRLOAD_INVERT_Y);
   kos_img_free (&front_txr, 0);
-  
-  glGenTextures (8, &texture[0]);
   
   glBindTexture (GL_TEXTURE_2D, texture[0]);
   glKosTex2D (GL_ARGB1555_TWID, front_txr.w, front_txr.h, texaddr);
@@ -933,34 +997,35 @@ main (int argc, char* argv[])
   glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
   
   glBindTexture (GL_TEXTURE_2D, texture[2]);
-  texaddr = pvr_mem_malloc (256 * 256 * 2);
+  texaddr = pvr_mem_malloc (TEXSIZE * TEXSIZE * 2);
   png_to_texture ("/rd/sky3.png", texaddr, PNG_NO_ALPHA);
-  glKosTex2D (GL_RGB565_TWID, 256, 256, texaddr);
+  glKosTex2D (GL_RGB565_TWID, TEXSIZE, TEXSIZE, texaddr);
 
   glBindTexture (GL_TEXTURE_2D, texture[3]);
-  texaddr = pvr_mem_malloc (256 * 256 * 2);
+  texaddr = pvr_mem_malloc (TEXSIZE * TEXSIZE * 2);
   png_to_texture ("/rd/sky4.png", texaddr, PNG_NO_ALPHA);
-  glKosTex2D (GL_RGB565_TWID, 256, 256, texaddr);
+  glKosTex2D (GL_RGB565_TWID, TEXSIZE, TEXSIZE, texaddr);
 
   glBindTexture (GL_TEXTURE_2D, texture[4]);
-  texaddr = pvr_mem_malloc (256 * 256 * 2);
+  texaddr = pvr_mem_malloc (TEXSIZE * TEXSIZE * 2);
   png_to_texture ("/rd/sky5.png", texaddr, PNG_NO_ALPHA);
-  glKosTex2D (GL_RGB565_TWID, 256, 256, texaddr);
+  glKosTex2D (GL_RGB565_TWID, TEXSIZE, TEXSIZE, texaddr);
 
   glBindTexture (GL_TEXTURE_2D, texture[5]);
-  texaddr = pvr_mem_malloc (256 * 256 * 2);
+  texaddr = pvr_mem_malloc (TEXSIZE * TEXSIZE * 2);
   png_to_texture ("/rd/sky6.png", texaddr, PNG_NO_ALPHA);
-  glKosTex2D (GL_RGB565_TWID, 256, 256, texaddr);
+  glKosTex2D (GL_RGB565_TWID, TEXSIZE, TEXSIZE, texaddr);
 
   glBindTexture (GL_TEXTURE_2D, texture[6]);
-  texaddr = pvr_mem_malloc (256 * 256 * 2);
+  texaddr = pvr_mem_malloc (TEXSIZE * TEXSIZE * 2);
   png_to_texture ("/rd/sky7.png", texaddr, PNG_NO_ALPHA);
-  glKosTex2D (GL_RGB565_TWID, 256, 256, texaddr);
+  glKosTex2D (GL_RGB565_TWID, TEXSIZE, TEXSIZE, texaddr);
 
   glBindTexture (GL_TEXTURE_2D, texture[7]);
-  texaddr = pvr_mem_malloc (256 * 256 * 2);
+  texaddr = pvr_mem_malloc (TEXSIZE * TEXSIZE * 2);
   png_to_texture ("/rd/sky8.png", texaddr, PNG_NO_ALPHA);
-  glKosTex2D (GL_RGB565_TWID, 256, 256, texaddr);
+  glKosTex2D (GL_RGB565_TWID, TEXSIZE, TEXSIZE, texaddr);
+#endif
   
   glEnable (GL_DEPTH_TEST);
   glEnable (GL_CULL_FACE);

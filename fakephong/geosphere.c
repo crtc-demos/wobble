@@ -7,6 +7,7 @@
 
 #include "vector.h"
 #include "restrip.h"
+#include "object.h"
 
 /***
 	 1           3           5
@@ -120,7 +121,7 @@ subdivide (float in_points[][3], int strips_in, int strip_length, int recur,
 		      strips_out_p, strip_length_out_p);
 }
 
-float *
+static float *
 make_geosphere (int depth, int *strips_p, int *strip_length_p)
 {
   enum
@@ -159,7 +160,7 @@ make_geosphere (int depth, int *strips_p, int *strip_length_p)
   return subdivide (in_points, 4, 4, depth, strips_p, strip_length_p);
 }
 
-strip *
+static strip *
 strips_for_geosphere (float *data, int num_strips, int strip_length)
 {
   strip *begin = NULL, *end = NULL;
@@ -178,11 +179,27 @@ strips_for_geosphere (float *data, int num_strips, int strip_length)
         end->next = newstrip;
 
       newstrip->start = (float (*)[][3]) &data[i * strip_length * 3];
+      newstrip->normals = (float (*)[][3]) &data[i * strip_length * 3];
       newstrip->length = strip_length;
+      newstrip->inverse = 0;
+      newstrip->attrs = NULL;
       newstrip->next = NULL;
       
       end = newstrip;
     }
   
   return begin;
+}
+
+object *
+geosphere_create (int subdivisions)
+{
+  float *spheredata;
+  strip *spherestrips;
+  int strips, strip_length;
+
+  spheredata = make_geosphere (subdivisions, &strips, &strip_length);
+  spherestrips = strips_for_geosphere (spheredata, strips, strip_length);
+
+  return object_create_default (spherestrips);
 }

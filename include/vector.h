@@ -5,6 +5,7 @@
 #define FLOAT_TYPE float
 #endif
 
+#include <math.h>
 #include <assert.h>
 
 #define DC_FAST_MATHS 1
@@ -17,7 +18,7 @@
 #include <GL/gl.h>
 
 static __inline__ FLOAT_TYPE
-vec_dot (FLOAT_TYPE *a, FLOAT_TYPE *b)
+vec_dot (const FLOAT_TYPE *a, const FLOAT_TYPE *b)
 {
 #ifdef DC_FAST_MATHS
   return fipr (a[0], a[1], a[2], 0.0, b[0], b[1], b[2], 0.0);
@@ -27,7 +28,7 @@ vec_dot (FLOAT_TYPE *a, FLOAT_TYPE *b)
 }
 
 static __inline__ void
-vec_normalize (FLOAT_TYPE *dst, FLOAT_TYPE *in)
+vec_normalize (FLOAT_TYPE *dst, const FLOAT_TYPE *in)
 {
 #ifdef DC_FAST_MATHS
   FLOAT_TYPE mag = fipr_magnitude_sqr (in[0], in[1], in[2], 0.0);
@@ -48,7 +49,7 @@ vec_normalize (FLOAT_TYPE *dst, FLOAT_TYPE *in)
 }
 
 static __inline__ FLOAT_TYPE
-vec_length (FLOAT_TYPE *vec)
+vec_length (const FLOAT_TYPE *vec)
 {
 #ifdef DC_FAST_MATHS
   return fsqrt (fipr_magnitude_sqr (vec[0], vec[1], vec[2], 0.0));
@@ -66,7 +67,7 @@ static matrix_t b_mat __attribute__((aligned(32))) =
   };
 
 static __inline__ void
-vec_cross (FLOAT_TYPE *dst, FLOAT_TYPE *a, FLOAT_TYPE *b)
+vec_cross (FLOAT_TYPE *dst, const FLOAT_TYPE *a, const FLOAT_TYPE *b)
 {
 #ifdef DC_FAST_MATHS
     
@@ -120,7 +121,7 @@ vec_cross (FLOAT_TYPE *dst, FLOAT_TYPE *a, FLOAT_TYPE *b)
 }
 
 static __inline__ void
-vec_scale (FLOAT_TYPE *dst, FLOAT_TYPE *src, FLOAT_TYPE scale)
+vec_scale (FLOAT_TYPE *dst, const FLOAT_TYPE *src, FLOAT_TYPE scale)
 {
   dst[0] = src[0] * scale;
   dst[1] = src[1] * scale;
@@ -128,7 +129,7 @@ vec_scale (FLOAT_TYPE *dst, FLOAT_TYPE *src, FLOAT_TYPE scale)
 }
 
 static __inline__ void
-vec_add (FLOAT_TYPE *dst, FLOAT_TYPE *a, FLOAT_TYPE *b)
+vec_add (FLOAT_TYPE *dst, const FLOAT_TYPE *a, const FLOAT_TYPE *b)
 {
   dst[0] = a[0] + b[0];
   dst[1] = a[1] + b[1];
@@ -136,7 +137,7 @@ vec_add (FLOAT_TYPE *dst, FLOAT_TYPE *a, FLOAT_TYPE *b)
 }
 
 static __inline__ void
-vec_sub (FLOAT_TYPE *dst, FLOAT_TYPE *a, FLOAT_TYPE *b)
+vec_sub (FLOAT_TYPE *dst, const FLOAT_TYPE *a, const FLOAT_TYPE *b)
 {
   dst[0] = a[0] - b[0];
   dst[1] = a[1] - b[1];
@@ -144,7 +145,7 @@ vec_sub (FLOAT_TYPE *dst, FLOAT_TYPE *a, FLOAT_TYPE *b)
 }
 
 static __inline__ void
-vec_transform (FLOAT_TYPE *dst, FLOAT_TYPE *mat, FLOAT_TYPE *src)
+vec_transform (FLOAT_TYPE *dst, const FLOAT_TYPE *mat, const FLOAT_TYPE *src)
 {
   assert (dst != src);
 
@@ -167,7 +168,8 @@ vec_transform (FLOAT_TYPE *dst, FLOAT_TYPE *mat, FLOAT_TYPE *src)
 }
 
 static __inline__ void
-vec_transform_post (FLOAT_TYPE *dst, FLOAT_TYPE *src, FLOAT_TYPE *mat)
+vec_transform_post (FLOAT_TYPE *dst, const FLOAT_TYPE *src,
+		    const FLOAT_TYPE *mat)
 {
   assert (dst != src);
 
@@ -190,7 +192,7 @@ vec_transform_post (FLOAT_TYPE *dst, FLOAT_TYPE *src, FLOAT_TYPE *mat)
 }
 
 static __inline__ void
-vec_mat_apply (FLOAT_TYPE *dst, FLOAT_TYPE *a, FLOAT_TYPE *b)
+vec_mat_apply (FLOAT_TYPE *dst, const FLOAT_TYPE *a, const FLOAT_TYPE *b)
 {
   vec_transform (&dst[0], a, &b[0]);
   vec_transform (&dst[4], a, &b[4]);
@@ -201,7 +203,7 @@ vec_mat_apply (FLOAT_TYPE *dst, FLOAT_TYPE *a, FLOAT_TYPE *b)
 /* Transpose the rotation part of (an orthogonal) matrix only.  */
 
 static __inline__ void
-vec_transpose_rotation (FLOAT_TYPE *dst, FLOAT_TYPE *src)
+vec_transpose_rotation (FLOAT_TYPE *dst, const FLOAT_TYPE *src)
 {
   assert (dst != src);
   
@@ -231,7 +233,7 @@ vec_transpose_rotation (FLOAT_TYPE *dst, FLOAT_TYPE *src)
    to know the axis too, pass non-NULL for AXB.  */
 
 static __inline__ FLOAT_TYPE
-vec_angle (FLOAT_TYPE *a, FLOAT_TYPE *b, FLOAT_TYPE *axb)
+vec_angle (const FLOAT_TYPE *a, const FLOAT_TYPE *b, FLOAT_TYPE *axb)
 {
   FLOAT_TYPE a_cross_b[3];
   FLOAT_TYPE *a_cross_b_p = &a_cross_b[0];
@@ -252,6 +254,69 @@ vec_angle (FLOAT_TYPE *a, FLOAT_TYPE *b, FLOAT_TYPE *axb)
     }
 
   return res;
+}
+
+static __inline__ void
+vec_invertmat3 (FLOAT_TYPE *dst, const FLOAT_TYPE *src)
+{
+  FLOAT_TYPE e11 = src[0], e12 = src[4], e13 = src[8];
+  FLOAT_TYPE e21 = src[1], e22 = src[5], e23 = src[9];
+  FLOAT_TYPE e31 = src[2], e32 = src[6], e33 = src[10];
+  FLOAT_TYPE det = e11 * e22 * e33 - e11 * e32 * e23 +
+		   e21 * e32 * e13 - e21 * e12 * e33 +
+		   e31 * e12 * e23 - e31 * e22 * e13;
+  FLOAT_TYPE idet = (det == 0) ? 1.0 : 1.0 / det;
+
+  dst[0]  =  (e22 * e33 - e23 * e32) * idet;
+  dst[4]  = -(e12 * e33 - e13 * e32) * idet;
+  dst[8]  =  (e12 * e23 - e13 * e22) * idet;
+  dst[12] = 0.0f;
+
+  dst[1]  = -(e21 * e33 - e23 * e31) * idet;
+  dst[5]  =  (e11 * e33 - e13 * e31) * idet;
+  dst[9]  = -(e11 * e23 - e13 * e21) * idet;
+  dst[13] = 0.0f;
+
+  dst[2]  =  (e21 * e32 - e22 * e31) * idet;
+  dst[6]  = -(e11 * e32 - e12 * e31) * idet;
+  dst[10] =  (e11 * e22 - e12 * e21) * idet;
+  dst[14] = 0.0f;
+  
+  dst[3]  = 0.0f;
+  dst[7]  = 0.0f;
+  dst[11] = 0.0f;
+  dst[15] = 1.0f;
+}
+
+/* This is the inverse of the transpose of the rotation part of the modelview
+   matrix, suitable for transforming normals.  */
+
+static __inline__ void
+vec_normal_from_modelview (FLOAT_TYPE *dst, const FLOAT_TYPE *src)
+{
+  FLOAT_TYPE tmp[16];
+
+  vec_invertmat3 (tmp, src);
+
+  dst[0] = tmp[0];
+  dst[1] = tmp[4];
+  dst[2] = tmp[8];
+  dst[3] = 0.0f;
+  
+  dst[4] = tmp[1];
+  dst[5] = tmp[5];
+  dst[6] = tmp[9];
+  dst[7] = 0.0f;
+  
+  dst[8] = tmp[2];
+  dst[9] = tmp[6];
+  dst[10] = tmp[10];
+  dst[11] = 0.0f;
+  
+  dst[12] = 0.0f;
+  dst[13] = 0.0f;
+  dst[14] = 0.0f;
+  dst[15] = 1.0f;
 }
 
 #endif

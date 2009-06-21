@@ -12,8 +12,10 @@
 #include <png/png.h>
 
 #include "geosphere.h"
+#include "torus.h"
 #include "vector.h"
 #include "restrip.h"
+#include "fakephong.h"
 
 #define PARAMETERISATION 1
 
@@ -23,13 +25,18 @@ KOS_INIT_FLAGS (INIT_DEFAULT);
 KOS_INIT_ROMDISK (romdisk);
 
 float light_pos[] = {0.5, 0.5, -3.0};
+float light_updir[] = {0.0, 1.0, 0.0};
 float eye_pos[] = {0.0, 0.0, -4.5};
 
 static matrix_t camera __attribute__((aligned(32)));
 static matrix_t invcamera __attribute__((aligned(32)));
+static matrix_t projection __attribute__((aligned(32)));
+static matrix_t mview __attribute__((aligned(32)));
+static matrix_t normxform __attribute__((aligned(32)));
 
 pvr_ptr_t highlight = 0;
 
+#if 0
 static void
 render_highlight (float hardness)
 {
@@ -106,6 +113,7 @@ render_highlight (float hardness)
   
   free (tmphilight);
 }
+#endif
 
 static void
 set_grey_palette (void)
@@ -166,6 +174,7 @@ lightsource_vertex (float *vertex, float *norm)
 }
 #endif
 
+#if 0
 /* LIGHT is the direction of the light from the vertex in question, and
    LIGHT_UPDIR is an "upwards" orientation vector for the light.  It doesn't
    have to be exactly perpendicular to the light vector, but it should be
@@ -325,23 +334,27 @@ classify_triangle (float tri[3][3], int clockwise, void *extra)
   else
     return -1;
 }
+#endif
 
 void
 render_geosphere (strip *strips, int pass)
 {
   int sidx;
-  strip *strip_starts[1] = { 0 };
-  strip *strip_ends[1] = { 0 };
+/*  strip *strip_starts[1] = { 0 };
+  strip *strip_ends[1] = { 0 };*/
   strip *strip_iter, *to_draw = strips;
-  
+
+#if 0
   if (capacity == 0)
     {
       capacity = 10;
       stripbuf = malloc (sizeof (strip) * capacity);
     }
+#endif
     
   //srand (0);
-  
+
+#if 0
   if (pass == 1)
     {
       glColor4ub (255, 255, 255, 255);
@@ -373,12 +386,13 @@ render_geosphere (strip *strips, int pass)
 		    &stripbuf, &capacity);
       to_draw = strip_starts[0];
     }
+#endif
 
   for (strip_iter = to_draw; strip_iter; strip_iter = strip_iter->next)
     {
       int strip_length = strip_iter->length;
       float (*data)[][3] = strip_iter->start;
-      vertex_info *v_inf = strip_iter->extra;
+      /*vertex_info *v_inf = strip_iter->extra;*/
       int invert = 0;
 
       if (strip_length < 0)
@@ -397,10 +411,20 @@ render_geosphere (strip *strips, int pass)
       for (sidx = 0; sidx < strip_length; sidx++)
         {
 	  if (pass == 0)
-	    lightsource_fake_phong (0, 0, (float *) &(*data)[sidx],
-				    (float *) &(*data)[sidx], pass, NULL);
+	    {
+	      int amb[3], pig[3];
+	      amb[0] = amb[1] = amb[2] = 64;
+	      pig[0] = 191;
+	      pig[1] = 0;
+	      pig[2] = 0;
+	      lightsource_diffuse ((float *) &(*data)[sidx],
+				   (float *) &(*data)[sidx], amb, pig,
+				   light_pos);
+	    }
+#if 0
           else
 	    glTexCoord2f (v_inf[sidx].texc[0], v_inf[sidx].texc[1]);
+#endif
 
 	  if (invert == 1 && sidx == 0)
 	    glVertex3fv ((GLfloat *) &(*data)[0]);
@@ -429,7 +453,7 @@ init_pvr (void)
       PVR_BINSIZE_16 },	/* Punch-thrus.  */
     512 * 1024,		/* Vertex buffer size 512K.  */
     0,			/* No DMA.  */
-    1			/* No FSAA.  */
+    0			/* No FSAA.  */
   };
   
   pvr_init (&params);
@@ -437,29 +461,41 @@ init_pvr (void)
 
 float rot1 = 0.0;
 float rot2 = 0.0;
+float rot3 = 0.0;
+float rot4 = 0.0;
 
 int
 main (int argc, char *argv[])
 {
   int cable_type;
   int quit = 0;
-  float *spheredata;
-  strip *spherestrips;
-  int strips, strip_length;
   GLuint texture[1];
+  object *sphobj;
+  fakephong_info f_phong;
   
   cable_type = vid_check_cable ();
   if (cable_type == CT_VGA)
     vid_init (DM_640x480_VGA, PM_RGB565);
   else
     vid_init (DM_640x480_PAL_IL, PM_RGB565);
-  
-  dbgio_printf ("Generating sphere data... ");
-  spheredata = make_geosphere (2, &strips, &strip_length);
-  spherestrips = strips_for_geosphere (spheredata, strips, strip_length);
-  dbgio_printf ("done. %d strips of length %d\n", strips, strip_length);
 
-#if 0  
+  init_pvr ();
+
+  highlight = pvr_mem_malloc (256 * 256);
+  fakephong_highlight_texture (highlight, 256, 256, 70.0f);
+
+  f_phong.highlight = highlight;
+  f_phong.xsize = 256;
+  f_phong.ysize = 256;
+
+  /*sphobj = geosphere_create (2);*/
+  sphobj = torus_create (1.0, 0.4, 20, 40);
+  sphobj->fake_phong = &f_phong;
+
+  object_set_ambient (sphobj, 64, 0, 0);
+  object_set_pigment (sphobj, 255, 0, 0);
+
+#if 0
   dbgio_printf ("sphere data:\n");
   for (j = 0; j < strips; j++)
     {
@@ -475,10 +511,9 @@ main (int argc, char *argv[])
     }
 #endif
   
-  init_pvr ();
   glKosInit ();
   
-  glViewport (0, 0, 1280, 480);
+  glViewport (0, 0, 640, 480);
   
   glEnable (GL_DEPTH_TEST);
   glEnable (GL_CULL_FACE);
@@ -493,6 +528,8 @@ main (int argc, char *argv[])
 		  1.0,			/* Z near.  */
 		  50.0);		/* Z far.  */
 
+  glGetFloatv (GL_PROJECTION_MATRIX, &projection[0][0]);
+
   glMatrixMode (GL_MODELVIEW);
   glLoadIdentity ();
   gluLookAt (0.0,  0.0, -4.5,		/* Eye position.  */
@@ -504,12 +541,12 @@ main (int argc, char *argv[])
   
   glGenTextures (1, &texture[0]);
 
-  render_highlight (30.0f);
+  /*render_highlight (30.0f);
   glBindTexture (GL_TEXTURE_2D, texture[0]);
   glKosTex2D (PVR_TXRFMT_PAL8BPP | PVR_TXRFMT_TWIDDLED, 256, 256, highlight);
   
   glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
-  glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
+  glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);*/
   
   set_grey_palette ();
     
@@ -554,32 +591,47 @@ main (int argc, char *argv[])
       if (rot2 > 2 * M_PI)
         rot2 -= 2 * M_PI;
       
-      ambient_red = 64;
+      rot3 += 1;
+      if (rot3 > 360)
+        rot3 -= 360;
+
+      rot4 += 0.7;
+      if (rot4 > 360)
+        rot4 -= 360;
+      
+      /*ambient_red = 64;
       ambient_green = 0;
       ambient_blue = 0;
       pigment_red = 128;
       pigment_green = 0;
-      pigment_blue = 0;
+      pigment_blue = 0;*/
 
       glDisable (GL_TEXTURE_2D);
       glPushMatrix ();
       glScalef (0.8 + 0.2 * sinf (rot2 + 0.5),
 		0.8 + 0.2 * sinf (rot2 + 0.5),
 		0.8 + 0.2 * sinf (rot2 + 0.5));
-      render_geosphere (spherestrips, 0);
+      glRotatef (rot3, 0.0, 1.0, 0.0);
+      glRotatef (rot4, 1.0, 0.0, 0.0);
+      /*render_geosphere (spherestrips, 0);*/
+      glGetFloatv (GL_MODELVIEW_MATRIX, &mview[0][0]);
+      vec_normal_from_modelview (&normxform[0][0], &mview[0][0]);
+      object_render_immediate (sphobj, 0, mview, normxform, projection, camera,
+			       invcamera, eye_pos, light_pos, light_updir);
       glPopMatrix ();
-      
+
+#if 0
       glPushMatrix ();
       glScalef (0.8 + 0.2 * sinf (rot2 + 1.0),
 		0.8 + 0.2 * sinf (rot2 + 1.0),
 		0.8 + 0.2 * sinf (rot2 + 1.0));
       glTranslatef (0.0, 1.0, 0.0);
-      ambient_red = 0;
+      /*ambient_red = 0;
       ambient_green = 64;
       ambient_blue = 0;
       pigment_red = 0;
       pigment_green = 128;
-      pigment_blue = 0;
+      pigment_blue = 0;*/
       render_geosphere (spherestrips, 0);
       glPopMatrix ();
 
@@ -588,14 +640,15 @@ main (int argc, char *argv[])
 		0.8 + 0.2 * sinf (rot2),
 		0.8 + 0.2 * sinf (rot2));
       glTranslatef (0.0, -1.0, 0.0);
-      ambient_red = 0;
+      /*ambient_red = 0;
       ambient_green = 0;
       ambient_blue = 64;
       pigment_red = 0;
       pigment_green = 0;
-      pigment_blue = 128;
+      pigment_blue = 128;*/
       render_geosphere (spherestrips, 0);
       glPopMatrix ();
+#endif
 
       /*glPopMatrix ();*/
       
@@ -606,9 +659,16 @@ main (int argc, char *argv[])
       glScalef (0.8 + 0.2 * sinf (rot2 + 0.5),
 		0.8 + 0.2 * sinf (rot2 + 0.5),
 		0.8 + 0.2 * sinf (rot2 + 0.5));
-      render_geosphere (spherestrips, 1);
+      glRotatef (rot3, 0.0, 1.0, 0.0);
+      glRotatef (rot4, 1.0, 0.0, 0.0);
+      //render_geosphere (spherestrips, 1);
+      glGetFloatv (GL_MODELVIEW_MATRIX, &mview[0][0]);
+      vec_normal_from_modelview (&normxform[0][0], &mview[0][0]);
+      object_render_immediate (sphobj, 1, mview, normxform, projection, camera,
+			       invcamera, eye_pos, light_pos, light_updir);
       glPopMatrix ();
 
+#if 0
       glPushMatrix ();
       glScalef (0.8 + 0.2 * sinf (rot2 + 1.0),
 		0.8 + 0.2 * sinf (rot2 + 1.0),
@@ -624,6 +684,7 @@ main (int argc, char *argv[])
       glTranslatef (0.0, -1.0, 0.0);
       render_geosphere (spherestrips, 1);
       glPopMatrix ();
+#endif
 
       glKosFinishList ();
       

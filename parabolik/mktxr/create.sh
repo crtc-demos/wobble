@@ -1,5 +1,5 @@
 #!/bin/sh
-SIZE=256
+SIZE=512
 
 SIZEM1=$(( $SIZE - 1 ))
 CENT=$(( $SIZE / 2 ))

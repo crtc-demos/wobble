@@ -1,21 +1,32 @@
 
 	CC =		kos-cc
 	CFLAGS =	-O3
-	INCLUDE =	-I../include
+	INCLUDE =	-Iinclude
 	STRIP =		kos-strip
 	DEPFLAGS =	-DDREAMCAST_KOS -D_arch_dreamcast
 	GENROMFS =	$(KOS_GENROMFS)
+	DCTOOL =	/usr/local/bin/dc-tool
 
-	OBJS =		perlin.o distort.o parabolik.o transform.o romdisk.o
+	OBJS =
 	ROMDISK =	romdisk.img
 
-	TARGET = parabolik.elf
+	TARGET =	demo.elf
 
-	SRC =		perlin.c distort.c parabolik.c transform.c
+	ARFLAGS =	cr
+
+	SRC =		
+
+	COMPASS_SRC =	libcompass/fakephong.c libcompass/object.c \
+			libcompass/palette.c libcompass/restrip.c
+
+	COMPASS_OBJ =	libcompass/fakephong.o libcompass/object.o \
+			libcompass/palette.o libcompass/restrip.o
+	LIBCOMPASS =	libcompass/libcompass.a
 
 .PHONY:	.depend
 
-all:	$(TARGET)
+#all:	$(TARGET)
+all:	libcompass/libcompass.a
 
 clean:
 	rm -f $(OBJS) $(TARGET)
@@ -24,11 +35,14 @@ cleaner:	clean
 	rm -f *.d
 
 run:	$(TARGET)
-	/usr/local/bin/dc-tool -b 115200 -x $(TARGET)
+	$(DCTOOL) -b 115200 -x $(TARGET)
 
-$(TARGET):	$(OBJS)
-	$(KOS_CC) $(KOS_CFLAGS) $(KOS_LDFLAGS) -o $(TARGET) $(KOS_START) $(OBJS) -lgl -lpng -lkmg -lz -lm -lkosutils $(KOS_LIBS)
+$(TARGET):	$(OBJS) $(LIBCOMPASS)
+	$(KOS_CC) $(KOS_CFLAGS) $(KOS_LDFLAGS) -o $(TARGET) $(KOS_START) $(OBJS) -Llibcompass -lcompass -lgl -lpng -lz -lm -lkosutils $(KOS_LIBS)
 	$(STRIP) $(TARGET)
+
+$(LIBCOMPASS):	$(COMPASS_OBJ)
+	$(KOS_AR) $(ARFLAGS) $(LIBCOMPASS) $(COMPASS_OBJ)
 
 .PHONY: $(ROMDISK)
 $(ROMDISK): imagedir_clean

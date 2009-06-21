@@ -27,9 +27,8 @@ restrip_list (strip *strips_in, strip_classify_fn fn, strip *strip_starts[],
       
       for (i = 0; i < strip_ptr->length - 2; i++)
         {
-	  void *extra
-	    = &((char *)strip_ptr->extra)[strip_ptr->extra_elsize * i];
-	  int class = fn (&(*strip_ptr->start)[i], (i & 1) == 1, extra);
+	  vertex_attrs *attrs = &strip_ptr->attrs[i];
+	  int class = fn (&(*strip_ptr->start)[i], (i & 1) == 1, attrs);
 	  
 	  if (class == current_class)
 	    strip_length++;
@@ -48,16 +47,22 @@ restrip_list (strip *strips_in, strip_classify_fn fn, strip *strip_starts[],
 		  
 		  newptr = &(*stripbuf)[entries];
 		  
-		  class_end->next = newptr;
+		  if (class_end != NULL)
+		    class_end->next = newptr;
+
 		  newptr->next = 0;
 		  
 		  newptr->start = strip_start;
 		  newptr->length = strip_length + 2;
+
 		  if ((start_pos & 1) == 1)
-		    newptr->length = -newptr->length;
-		  newptr->extra = &((char *) strip_ptr->extra)
-				    [strip_ptr->extra_elsize * start_pos];
-		  newptr->extra_elsize = strip_ptr->extra_elsize;
+		    newptr->inverse = !strip_ptr->inverse;
+		  else
+		    newptr->inverse = strip_ptr->inverse;
+
+		  newptr->attrs = &strip_ptr->attrs[start_pos];
+		  newptr->normals = (float (*)[][3])
+				    &(*strip_ptr->normals)[start_pos];
 		  
 		  strip_ends[current_class] = newptr;
 		  if (strip_starts[current_class] == NULL)
@@ -85,16 +90,21 @@ restrip_list (strip *strips_in, strip_classify_fn fn, strip *strip_starts[],
 	  
 	  newptr = &(*stripbuf)[entries];
 	  
-	  class_end->next = newptr;
+	  if (class_end != NULL)
+	    class_end->next = newptr;
+
 	  newptr->next = 0;
 	  
 	  newptr->start = strip_start;
 	  newptr->length = strip_length + 2;
+
 	  if ((start_pos & 1) == 1)
-	    newptr->length = -newptr->length;
-	  newptr->extra = &((char *) strip_ptr->extra)
-			    [strip_ptr->extra_elsize * start_pos];
-	  newptr->extra_elsize = strip_ptr->extra_elsize;
+	    newptr->inverse = !strip_ptr->inverse;
+	  else
+	    newptr->inverse = strip_ptr->inverse;
+
+	  newptr->attrs = &strip_ptr->attrs[start_pos];
+	  newptr->normals = (float (*)[][3]) &(*strip_ptr->normals)[start_pos];
 	  
 	  strip_ends[current_class] = newptr;
 	  if (strip_starts[current_class] == NULL)

@@ -1,17 +1,17 @@
 
 	CC =		kos-cc
-	CFLAGS =	-O3
+	CFLAGS =	-O2
 	INCLUDE =	-I../include
 	STRIP =		kos-strip
 	DEPFLAGS =	-DDREAMCAST_KOS -D_arch_dreamcast
 	GENROMFS =	$(KOS_GENROMFS)
 
-	OBJS =		geosphere.o restrip.o fakephong.o romdisk.o
+	OBJS =		geosphere.o torus.o fakephong.o romdisk.o
 	ROMDISK =	romdisk.img
 
 	TARGET =	fakephong.elf
 
-	SRC =		geosphere.c restrip.c fakephong.c
+	SRC =		geosphere.c torus.c fakephong.c
 
 .PHONY:	.depend
 
@@ -27,7 +27,7 @@ run:	$(TARGET)
 	/usr/local/bin/dc-tool -b 115200 -x $(TARGET)
 
 $(TARGET):	$(OBJS)
-	$(KOS_CC) $(KOS_CFLAGS) $(KOS_LDFLAGS) -o $(TARGET) $(KOS_START) $(OBJS) -lgl -lpng -lz -lm -lkosutils $(KOS_LIBS)
+	$(KOS_CC) $(KOS_CFLAGS) $(KOS_LDFLAGS) -o $(TARGET) $(KOS_START) $(OBJS) -lgl -lpng -lz -lkosutils -L../libcompass -lcompass -lm $(KOS_LIBS)
 	$(STRIP) $(TARGET)
 
 .PHONY: $(ROMDISK)
