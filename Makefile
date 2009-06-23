@@ -16,11 +16,13 @@
 
 	SRC =		
 
-	COMPASS_SRC =	libcompass/fakephong.c libcompass/object.c \
-			libcompass/palette.c libcompass/restrip.c
+	COMPASS_SRC =	libcompass/fakephong.c libcompass/envmap_dual_para.c \
+			libcompass/object.c libcompass/palette.c \
+			libcompass/restrip.c
 
-	COMPASS_OBJ =	libcompass/fakephong.o libcompass/object.o \
-			libcompass/palette.o libcompass/restrip.o
+	COMPASS_OBJ =	libcompass/fakephong.o libcompass/envmap_dual_para.o \
+			libcompass/object.o libcompass/palette.o \
+			libcompass/restrip.o
 	LIBCOMPASS =	libcompass/libcompass.a
 
 .PHONY:	.depend

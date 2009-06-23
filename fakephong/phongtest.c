@@ -118,25 +118,6 @@ render_highlight (float hardness)
 
 #if 0
 static void
-set_grey_palette (void)
-{
-  unsigned int i;
-  
-  pvr_set_pal_format (PVR_PAL_ARGB8888);
-  
-  for (i = 0; i < 256; i++)
-    {
-      unsigned int palentry;
-      
-      /* Grey ramp with solid alpha.  */
-      palentry = 0xff000000 | (i << 16) | (i << 8) | i;
-      pvr_set_pal_entry (i, palentry);
-    }
-}
-#endif
-
-#if 0
-static void
 lightsource_vertex (float *vertex, float *norm)
 {
   float norm_light[3];

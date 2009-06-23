@@ -112,7 +112,7 @@ object_render_immediate (const object *obj, int pass, matrix_t modelview,
 	  vec_normalize (&(*trans_norm)[i][0], x_norm);
 	}
 
-      if (pass == 0)
+      if (pass == 0 && obj->fake_phong)
         {
 	  /* First pass, dot-product lighting.  */
 	  pvr_poly_cxt_t cxt;

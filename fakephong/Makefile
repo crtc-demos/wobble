@@ -6,12 +6,12 @@
 	DEPFLAGS =	-DDREAMCAST_KOS -D_arch_dreamcast
 	GENROMFS =	$(KOS_GENROMFS)
 
-	OBJS =		geosphere.o torus.o fakephong.o romdisk.o
+	OBJS =		geosphere.o torus.o phongtest.o romdisk.o
 	ROMDISK =	romdisk.img
 
 	TARGET =	fakephong.elf
 
-	SRC =		geosphere.c torus.c fakephong.c
+	SRC =		geosphere.c torus.c phongtest.c
 
 .PHONY:	.depend
 
