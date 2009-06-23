@@ -1,6 +1,6 @@
 #include <kos.h>
 
-static void
+void
 palette_grey_ramp (void)
 {
   unsigned int i;

@@ -16,6 +16,7 @@
 #include "vector.h"
 #include "restrip.h"
 #include "fakephong.h"
+#include "palette.h"
 
 #define PARAMETERISATION 1
 
@@ -115,6 +116,7 @@ render_highlight (float hardness)
 }
 #endif
 
+#if 0
 static void
 set_grey_palette (void)
 {
@@ -131,6 +133,7 @@ set_grey_palette (void)
       pvr_set_pal_entry (i, palentry);
     }
 }
+#endif
 
 #if 0
 static void
@@ -548,7 +551,7 @@ main (int argc, char *argv[])
   glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
   glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);*/
   
-  set_grey_palette ();
+  palette_grey_ramp ();
     
   glBlendFunc (GL_ONE, GL_ONE);
   
