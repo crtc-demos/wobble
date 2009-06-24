@@ -10,6 +10,7 @@
 #include <GL/glu.h>
 
 #include <png/png.h>
+#include <kmg/kmg.h>
 
 #include "geosphere.h"
 #include "torus.h"
@@ -432,9 +433,9 @@ init_pvr (void)
   pvr_init_params_t params = {
     { PVR_BINSIZE_16,	/* Opaque polygons.  */
       PVR_BINSIZE_0,	/* Opaque modifiers.  */
-      PVR_BINSIZE_0,	/* Translucent polygons.  */
+      PVR_BINSIZE_16,	/* Translucent polygons.  */
       PVR_BINSIZE_0,	/* Translucent modifiers.  */
-      PVR_BINSIZE_16 },	/* Punch-thrus.  */
+      PVR_BINSIZE_0 },	/* Punch-thrus.  */
     512 * 1024,		/* Vertex buffer size 512K.  */
     0,			/* No DMA.  */
     0			/* No FSAA.  */
@@ -456,6 +457,9 @@ main (int argc, char *argv[])
   GLuint texture[1];
   object *sphobj;
   fakephong_info f_phong;
+  envmap_dual_para_info envmap;
+  kos_img_t front_txr, back_txr;
+  pvr_ptr_t texaddr;
   
   cable_type = vid_check_cable ();
   if (cable_type == CT_VGA)
@@ -472,9 +476,29 @@ main (int argc, char *argv[])
   f_phong.xsize = 256;
   f_phong.ysize = 256;
 
-  /*sphobj = geosphere_create (2);*/
-  sphobj = torus_create (1.0, 0.4, 20, 40);
+#if 0
+  sphobj = geosphere_create (2);
+#else
+  sphobj = torus_create (1.0, 0.4, 16, 32);
+#endif
   sphobj->fake_phong = &f_phong;
+
+  kmg_to_img ("/rd/sky1.kmg", &front_txr);
+  texaddr = pvr_mem_malloc (front_txr.byte_count);
+  pvr_txr_load_kimg (&front_txr, texaddr, PVR_TXRFMT_VQ_ENABLE);
+  envmap.front_txr = texaddr;
+  kos_img_free (&front_txr, 0);
+
+  kmg_to_img ("/rd/sky2o.kmg", &back_txr);
+  texaddr = pvr_mem_malloc (back_txr.byte_count);
+  pvr_txr_load_kimg (&back_txr, texaddr, PVR_TXRFMT_VQ_ENABLE);
+  envmap.back_txr = texaddr;
+  kos_img_free (&back_txr, 0);
+
+  envmap.xsize = front_txr.w;
+  envmap.ysize = front_txr.h;
+  /* Set up the bomb!  */
+  sphobj->env_map = &envmap;
 
   object_set_ambient (sphobj, 64, 0, 0);
   object_set_pigment (sphobj, 255, 0, 0);

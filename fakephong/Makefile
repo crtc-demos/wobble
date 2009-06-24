@@ -27,7 +27,7 @@ run:	$(TARGET)
 	/usr/local/bin/dc-tool -b 115200 -x $(TARGET)
 
 $(TARGET):	$(OBJS)
-	$(KOS_CC) $(KOS_CFLAGS) $(KOS_LDFLAGS) -o $(TARGET) $(KOS_START) $(OBJS) -lgl -lpng -lz -lkosutils -L../libcompass -lcompass -lm $(KOS_LIBS)
+	$(KOS_CC) $(KOS_CFLAGS) $(KOS_LDFLAGS) -o $(TARGET) $(KOS_START) $(OBJS) -lgl -lpng -lkmg -lz -lkosutils -L../libcompass -lcompass -lm $(KOS_LIBS)
 	$(STRIP) $(TARGET)
 
 .PHONY: $(ROMDISK)

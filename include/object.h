@@ -3,12 +3,14 @@
 
 #include "vector.h"
 #include "fakephong.h"
+#include "envmap_dual_para.h"
 
 typedef float vector[3];
 
 typedef struct vertex_attrs
 {
   fakephong_vertex_info fakephong;
+  envmap_dual_para_vertex_info env_map;
 } vertex_attrs;
 
 typedef struct strip
@@ -42,7 +44,7 @@ typedef struct
   fakephong_info *fake_phong;
   
   /* Render object with dual-paraboloid environment map if non-NULL.  */
-  void *env_map;
+  envmap_dual_para_info *env_map;
   
   /* Render using bump map if non-NULL.  */
   void *bump_map;

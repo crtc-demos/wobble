@@ -11,4 +11,19 @@ typedef struct
   unsigned int ysize;
 } envmap_dual_para_info;
 
+typedef struct
+{
+  float texc_f[3];
+  float texc_b[3];
+} envmap_dual_para_vertex_info;
+
+struct vertex_attrs;
+
+extern void envmap_dual_para_texcoords (float *texc_f, float *texc_b,
+					float x_vertex[3], float x_normal[3],
+					float c_eyepos[3], matrix_t invcamera);
+
+extern int envmap_classify_triangle (float tri[3][3], int clockwise,
+				     struct vertex_attrs *attrs);
+
 #endif

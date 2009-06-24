@@ -73,6 +73,9 @@ max_strip_length (const object *obj)
 static strip *stripbuf = NULL;
 static unsigned int capacity = 0;
 
+#define ALPHA_LIST PVR_LIST_TR_POLY
+//#define ALPHA_LIST PVR_LIST_PT_POLY
+
 /* NORMAL_XFORM is the transpose-inverse of the rotation part of the MODELVIEW
    matrix.  */
 
@@ -83,9 +86,19 @@ object_render_immediate (const object *obj, int pass, matrix_t modelview,
 			 const float *eye_pos, const float *light0_pos,
 			 const float *light0_up)
 {
+#define PDIV_SCREEN(OUT,IN)			\
+  ({						\
+    float recip_w = 1.0f / (IN)[3];		\
+    (OUT).x = 320 + 320 * ((IN)[0] * recip_w);	\
+    (OUT).y = 240 + 240 * ((IN)[1] * recip_w);	\
+    (OUT).z = recip_w;				\
+  })
+
   unsigned int strip_max = max_strip_length (obj), i;
   float (*trans)[][3], (*trans_norm)[][3];
   strip *str;
+  float eyepos4[4], c_eyepos[4];
+  vertex_attrs *attr_buf = malloc (sizeof (vertex_attrs) * strip_max);
   
   if (capacity == 0)
     {
@@ -93,11 +106,20 @@ object_render_immediate (const object *obj, int pass, matrix_t modelview,
       stripbuf = malloc (sizeof (strip) * capacity);
     }
   
+  if (obj->env_map)
+    {
+      memcpy (eyepos4, eye_pos, sizeof (float) * 3);
+      eyepos4[3] = 1.0;
+      vec_transform (&c_eyepos[0], &camera[0][0], &eyepos4[0]);
+    }
+  
   trans = malloc (sizeof (float) * 3 * strip_max);
   trans_norm = malloc (sizeof (float) * 3 * strip_max);
   
   for (str = obj->striplist; str; str = str->next)
     {
+      strip transformed_strip;
+
       /* This loop would benefit from assembly implementation.  */
       for (i = 0; i < str->length; i++)
         {
@@ -112,7 +134,141 @@ object_render_immediate (const object *obj, int pass, matrix_t modelview,
 	  vec_normalize (&(*trans_norm)[i][0], x_norm);
 	}
 
-      if (pass == 0 && obj->fake_phong)
+      transformed_strip.start = trans;
+      transformed_strip.length = str->length;
+      transformed_strip.normals = trans_norm;
+      transformed_strip.inverse = str->inverse;
+      transformed_strip.attrs = attr_buf;
+      transformed_strip.next = NULL;
+
+      if (obj->env_map)
+        {
+	  /* Dual-paraboloid environment mapping.  */
+	  strip *strip_starts[3] = { 0, 0, 0 };
+	  strip *strip_ends[3] = { 0, 0, 0 };
+	  pvr_poly_cxt_t cxt;
+	  pvr_poly_hdr_t hdr;
+	  strip *str_out;
+	  pvr_vertex_t vert;
+	  int class;
+
+	  vert.argb = PVR_PACK_COLOR (1.0f, 1.0f, 1.0f, 1.0f);
+	  vert.oargb = 0;
+
+	  for (i = 0; i < str->length; i++)
+	    envmap_dual_para_texcoords
+	      (&transformed_strip.attrs[i].env_map.texc_f[0],
+	       &transformed_strip.attrs[i].env_map.texc_b[0],
+	       (*transformed_strip.start)[i], (*transformed_strip.normals)[i],
+	       &c_eyepos[0], inv_camera_orientation);
+
+	  restrip_list (&transformed_strip, envmap_classify_triangle,
+			strip_starts, strip_ends, &stripbuf, &capacity);
+
+	  /* This way of doing things wastes a lot of time here (due to
+	     recalculation of above), and it's not really necessary.  Only
+	     temporary until we get DMA working.  */
+
+          if (pass == 0)
+	    {
+	      /* Render front strips.  */
+	      pvr_poly_cxt_txr (&cxt, PVR_LIST_OP_POLY,
+				PVR_TXRFMT_RGB565 | PVR_TXRFMT_TWIDDLED
+				| PVR_TXRFMT_VQ_ENABLE, obj->env_map->xsize,
+				obj->env_map->ysize, obj->env_map->front_txr,
+				PVR_FILTER_BILINEAR);
+
+	      pvr_poly_compile (&hdr, &cxt);
+	      
+	      /* Render both front and front-and-back strips (class 0 and
+	         2).  */
+	      for (class = 0; class <= 2; class += 2)
+		for (str_out = strip_starts[class]; str_out;
+		     str_out = str_out->next)
+	          {
+		    if (str_out->length < 3)
+		      continue;
+
+		    pvr_prim (&hdr, sizeof (hdr));
+
+		    for (i = 0; i < str_out->length; i++)
+		      {
+			float xvec[4], vec[4];
+			int last = (i == str_out->length - 1);
+
+			memcpy (vec, &(*str_out->start)[i], sizeof (float) * 3);
+			vec[3] = 1.0f;
+
+			vec_transform (&xvec[0], (float *) projection, &vec[0]);
+
+			vert.flags = (last) ? PVR_CMD_VERTEX_EOL
+					    : PVR_CMD_VERTEX;
+			PDIV_SCREEN (vert, xvec);
+			vert.u = str_out->attrs[i].env_map.texc_f[0];
+			vert.v = str_out->attrs[i].env_map.texc_f[1];
+			pvr_prim (&vert, sizeof (vert));
+			if (i == 0 && str_out->inverse)
+		          pvr_prim (&vert, sizeof (vert));
+		      }
+		  }
+
+	      pvr_poly_cxt_txr (&cxt, PVR_LIST_OP_POLY,
+	      			PVR_TXRFMT_ARGB4444 | PVR_TXRFMT_TWIDDLED
+				| PVR_TXRFMT_VQ_ENABLE, obj->env_map->xsize,
+				obj->env_map->ysize, obj->env_map->back_txr,
+				PVR_FILTER_BILINEAR);
+			
+	      /* Render back-only strips.  */
+	      class = 1;
+	    }
+	  else
+	    {
+	      pvr_poly_cxt_txr (&cxt, ALPHA_LIST,
+	      			PVR_TXRFMT_ARGB4444 | PVR_TXRFMT_TWIDDLED
+				| PVR_TXRFMT_VQ_ENABLE, obj->env_map->xsize,
+				obj->env_map->ysize, obj->env_map->back_txr,
+				PVR_FILTER_BILINEAR);
+	      cxt.txr.uv_clamp = PVR_UVCLAMP_UV;
+	      cxt.blend.src = PVR_BLEND_SRCALPHA;
+	      cxt.blend.dst = PVR_BLEND_INVSRCALPHA;
+	      cxt.txr.env = PVR_TXRENV_MODULATE;
+	      cxt.depth.comparison = PVR_DEPTHCMP_GEQUAL;
+	      /* Render front-and-back strips (back part, with alpha).  */
+	      class = 2;
+	    }
+
+	  pvr_poly_compile (&hdr, &cxt);
+
+	  for (str_out = strip_starts[class]; str_out; str_out = str_out->next)
+	    {
+	      if (str_out->length < 3)
+		continue;
+
+	      pvr_prim (&hdr, sizeof (hdr));
+
+	      for (i = 0; i < str_out->length; i++)
+		{
+		  float xvec[4], vec[4];
+		  int last = (i == str_out->length - 1);
+
+		  memcpy (vec, &(*str_out->start)[i], sizeof (float) * 3);
+		  vec[3] = 1.0f;
+
+		  vec_transform (&xvec[0], (float *) projection, &vec[0]);
+
+		  vert.flags = (last) ? PVR_CMD_VERTEX_EOL
+				      : PVR_CMD_VERTEX;
+		  PDIV_SCREEN (vert, xvec);
+		  vert.u = str_out->attrs[i].env_map.texc_b[0];
+		  vert.v = str_out->attrs[i].env_map.texc_b[1];
+		  pvr_prim (&vert, sizeof (vert));
+		  if (i == 0 && str_out->inverse)
+		    pvr_prim (&vert, sizeof (vert));
+		}
+	    }
+	}
+
+      if (pass == 0 && obj->fake_phong && !obj->env_map)
         {
 	  /* First pass, dot-product lighting.  */
 	  pvr_poly_cxt_t cxt;
@@ -142,9 +298,7 @@ object_render_immediate (const object *obj, int pass, matrix_t modelview,
 					       &(*trans_norm)[i][0],
 					       &obj->ambient, &obj->pigment,
 					       light0_pos);
-	      vert.x = 320 + 320 * (xvec[0] / xvec[3]);
-	      vert.y = 240 + 240 * (xvec[1] / xvec[3]);
-	      vert.z = 1.0f / xvec[3];
+	      PDIV_SCREEN (vert, xvec);
 	      vert.u = 0;
 	      vert.v = 0;
 	      pvr_prim (&vert, sizeof (vert));
@@ -160,9 +314,9 @@ object_render_immediate (const object *obj, int pass, matrix_t modelview,
 	  strip *strip_ends[1] = { 0 };
 	  pvr_poly_cxt_t cxt;
 	  pvr_poly_hdr_t hdr;
-	  strip transformed_strip, *str_out;
+	  strip *str_out;
 
-	  pvr_poly_cxt_txr (&cxt, PVR_LIST_PT_POLY,
+	  pvr_poly_cxt_txr (&cxt, ALPHA_LIST,
 			    PVR_TXRFMT_PAL8BPP | PVR_TXRFMT_TWIDDLED,
 			    obj->fake_phong->xsize, obj->fake_phong->ysize,
 			    obj->fake_phong->highlight, PVR_FILTER_BILINEAR);
@@ -179,14 +333,6 @@ object_render_immediate (const object *obj, int pass, matrix_t modelview,
 				    (float *) &(*trans_norm)[i][0], light0_pos,
 				    light0_up, eye_pos, transformed_strip.attrs,
 				    i);
-
-	  transformed_strip.start = trans;
-	  transformed_strip.length = str->length;
-	  transformed_strip.normals = trans_norm;
-	  transformed_strip.inverse = str->inverse;
-	  transformed_strip.attrs = malloc (sizeof (vertex_attrs)
-					    * str->length);
-	  transformed_strip.next = NULL;
 
 	  restrip_list (&transformed_strip, fakephong_classify_triangle,
 			strip_starts, strip_ends, &stripbuf, &capacity);
@@ -216,9 +362,7 @@ object_render_immediate (const object *obj, int pass, matrix_t modelview,
 		  vec_transform (&xvec[0], (float *) projection, &vec[0]);
 
 		  vert.flags = (last) ? PVR_CMD_VERTEX_EOL : PVR_CMD_VERTEX;
-		  vert.x = 320 + 320 * (xvec[0] / xvec[3]);
-		  vert.y = 240 + 240 * (xvec[1] / xvec[3]);
-		  vert.z = 1.0f / xvec[3];
+		  PDIV_SCREEN (vert, xvec);
 		  vert.u = str_out->attrs[i].fakephong.texc[0];
 		  vert.v = str_out->attrs[i].fakephong.texc[1];
 		  pvr_prim (&vert, sizeof (vert));
@@ -226,10 +370,11 @@ object_render_immediate (const object *obj, int pass, matrix_t modelview,
 		    pvr_prim (&vert, sizeof (vert));
 		}
 	    }
-	  free (transformed_strip.attrs);
 	}
     }
   
+  free (attr_buf);
   free (trans);
   free (trans_norm);
+#undef PDIV_SCREEN
 }

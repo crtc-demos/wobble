@@ -1,5 +1,5 @@
+#include "object.h"
 #include "envmap_dual_para.h"
-#include "vector.h"
 
 /* X_VERTEX is a vertex transformed by the modelview matrix.  X_NORMAL is a
    vertex transformed by the normal matrix (transpose-inverse of rotation part
@@ -33,7 +33,7 @@ envmap_dual_para_texcoords (float *texc_f, float *texc_b,
   z_f = -1.0 - z;
   
   x_f = 0.5 + 0.5 * (x_f / z_f);
-  y_f = 0.5 - 0.5 * (y_f / z_f);
+  y_f = 0.5 + 0.5 * (y_f / z_f);
   
   texc_f[0] = x_f;
   texc_f[1] = y_f;
@@ -44,9 +44,34 @@ envmap_dual_para_texcoords (float *texc_f, float *texc_b,
   z_b = 1.0 - z;
   
   x_b = 0.5 + 0.5 * (x_b / z_b);
-  y_b = 0.5 - 0.5 * (y_b / z_b);
+  y_b = 0.5 + 0.5 * (y_b / z_b);
   
   texc_b[0] = x_b;
   texc_b[1] = y_b;
   texc_b[2] = z;
+}
+
+/* A triangle can be rendered wholly with the front texture, or wholly with
+   the back texture, or with a mixture of both.  Use the following buckets for
+   these:
+   
+     0: front
+     1: back
+     2: both front & back
+   
+   Notice this allows single-pass rendering for 0/1.  */
+
+int
+envmap_classify_triangle (float tri[3][3], int clockwise, vertex_attrs *attrs)
+{
+  if (attrs[0].env_map.texc_f[2] > 0
+      && attrs[1].env_map.texc_f[2] > 0
+      && attrs[2].env_map.texc_f[2] > 0)
+    return 0;
+  else if (attrs[0].env_map.texc_b[2] < 0
+           && attrs[1].env_map.texc_b[2] < 0
+	   && attrs[2].env_map.texc_b[2] < 0)
+    return 1;
+  else
+    return 2;
 }
