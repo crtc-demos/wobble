@@ -180,9 +180,11 @@ strips_for_geosphere (float *data, int num_strips, int strip_length)
 
       newstrip->start = (float (*)[][3]) &data[i * strip_length * 3];
       newstrip->normals = (float (*)[][3]) &data[i * strip_length * 3];
+      newstrip->texcoords = NULL;
       newstrip->length = strip_length;
       newstrip->inverse = 0;
-      newstrip->attrs = NULL;
+      newstrip->v_attrs = NULL;
+      newstrip->s_attrs = NULL;
       newstrip->next = NULL;
       
       end = newstrip;

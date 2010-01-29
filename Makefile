@@ -1,6 +1,6 @@
 
 	CC =		kos-cc
-	CFLAGS =	-O3
+	CFLAGS =	-O3 -fomit-frame-pointer
 	INCLUDE =	-Iinclude
 	STRIP =		kos-strip
 	DEPFLAGS =	-DDREAMCAST_KOS -D_arch_dreamcast
@@ -17,12 +17,15 @@
 	SRC =		
 
 	COMPASS_SRC =	libcompass/fakephong.c libcompass/envmap_dual_para.c \
-			libcompass/object.c libcompass/palette.c \
-			libcompass/restrip.c
+			libcompass/bump_map.c libcompass/object.c \
+			libcompass/palette.c libcompass/restrip.c \
+			libcompass/perlin.c libcompass/perlin-3d.c
 
 	COMPASS_OBJ =	libcompass/fakephong.o libcompass/envmap_dual_para.o \
-			libcompass/object.o libcompass/palette.o \
-			libcompass/restrip.o
+			libcompass/bump_map.o libcompass/object.o \
+			libcompass/palette.o libcompass/restrip.o \
+			libcompass/perlin.o libcompass/perlin-3d.o
+
 	LIBCOMPASS =	libcompass/libcompass.a
 
 .PHONY:	.depend
@@ -31,10 +34,10 @@
 all:	libcompass/libcompass.a
 
 clean:
-	rm -f $(OBJS) $(TARGET)
+	rm -f $(OBJS) $(COMPASS_OBJ) $(TARGET)
 
 cleaner:	clean
-	rm -f *.d
+	rm -f *.d libcompass/*.d
 
 run:	$(TARGET)
 	$(DCTOOL) -b 115200 -x $(TARGET)
@@ -73,6 +76,7 @@ romdisk.d:
 ifneq ($(MAKECMDGOALS),clean)
 ifneq ($(MAKECMDGOALS),cleaner)
 include $(OBJS:.o=.d)
+include $(COMPASS_OBJ:.o=.d)
 endif
 endif
 

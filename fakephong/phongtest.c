@@ -14,6 +14,7 @@
 
 #include "geosphere.h"
 #include "torus.h"
+#include "cube.h"
 #include "vector.h"
 #include "restrip.h"
 #include "fakephong.h"
@@ -397,13 +398,13 @@ render_geosphere (strip *strips, int pass)
         {
 	  if (pass == 0)
 	    {
-	      int amb[3], pig[3];
-	      amb[0] = amb[1] = amb[2] = 64;
-	      pig[0] = 191;
-	      pig[1] = 0;
-	      pig[2] = 0;
+	      colour amb, pig;
+	      amb.r = amb.g = amb.b = 64;
+	      pig.r = 191;
+	      pig.g = 0;
+	      pig.b = 0;
 	      lightsource_diffuse ((float *) &(*data)[sidx],
-				   (float *) &(*data)[sidx], amb, pig,
+				   (float *) &(*data)[sidx], &amb, &pig,
 				   light_pos);
 	    }
 #if 0
@@ -460,27 +461,29 @@ main (int argc, char *argv[])
   envmap_dual_para_info envmap;
   kos_img_t front_txr, back_txr;
   pvr_ptr_t texaddr;
+  bumpmap_info binfo;
+  celshading_info celinfo;
   
   cable_type = vid_check_cable ();
   if (cable_type == CT_VGA)
     vid_init (DM_640x480_VGA, PM_RGB565);
   else
-    vid_init (DM_640x480_PAL_IL, PM_RGB565);
+    vid_init (DM_640x480_NTSC_IL, PM_RGB565);
 
   init_pvr ();
 
   highlight = pvr_mem_malloc (256 * 256);
-  fakephong_highlight_texture (highlight, 256, 256, 70.0f);
+  fakephong_highlight_texture (highlight, 256, 256, 10.0f);
 
   f_phong.highlight = highlight;
   f_phong.xsize = 256;
   f_phong.ysize = 256;
+  f_phong.intensity = 128;
 
 #if 0
   sphobj = geosphere_create (2);
-#else
+#elif 0
   sphobj = torus_create (1.0, 0.4, 16, 32);
-#endif
   sphobj->fake_phong = &f_phong;
 
   kmg_to_img ("/rd/sky1.kmg", &front_txr);
@@ -498,7 +501,32 @@ main (int argc, char *argv[])
   envmap.xsize = front_txr.w;
   envmap.ysize = front_txr.h;
   /* Set up the bomb!  */
-  sphobj->env_map = &envmap;
+  //sphobj->env_map = &envmap;
+
+#elif 1
+  /* It's not really very accurately named at the moment.  */
+  sphobj = /*geosphere_create (2);*/ torus_create (1.0, 0.4, 16, 32);
+  sphobj->cel_shading = &celinfo;
+  /*sphobj->fake_phong = &f_phong;*/
+  
+  {
+    png_load_texture ("/rd/white.png", &celinfo.texture, PNG_NO_ALPHA,
+		      &celinfo.w, &celinfo.h);
+  }
+  
+#else
+  sphobj = cube_create (1.0);
+
+  {
+    pvr_ptr_t bumptxr = bumpmap_load_raw ("/rd/bump.raw", 128, 128);
+    object_set_all_textures (sphobj, bumptxr, 128, 128);
+    bumpmap_auto_uv_orient (sphobj);
+    
+    binfo.intensity = 1.0f;
+    
+    sphobj->bump_map = &binfo;
+  }
+#endif
 
   object_set_ambient (sphobj, 64, 0, 0);
   object_set_pigment (sphobj, 255, 0, 0);
@@ -560,13 +588,36 @@ main (int argc, char *argv[])
     
   glBlendFunc (GL_ONE, GL_ONE);
   
+  //pvr_fog_table_exp (0.35);
+  //pvr_fog_table_linear (0, 5);
+  pvr_set_bg_color (0.5, 0.5, 0.5);
+  
   while (!quit)
     {
       MAPLE_FOREACH_BEGIN (MAPLE_FUNC_CONTROLLER, cont_state_t, st)
         if (st->buttons & CONT_START)
 	  quit = 1;
       MAPLE_FOREACH_END ()
-      
+
+      pvr_fog_table_color (1.0, 0.5, 0.5, 0.5);
+      pvr_fog_vertex_color (1.0, 0.5, 0.5, 0.5);
+      pvr_fog_table_exp2 (0.25);
+
+#if 0
+      {
+	uint32 idx;
+	uint32 value;
+	
+	for (idx = PVR_FOG_TABLE_BASE; idx < PVR_FOG_TABLE_BASE + 0x200;
+	     idx += 4)
+	  {
+	    value = rand () & 65535;
+	    value |= (rand () & 65535) << 16;
+	    PVR_SET (idx, value);
+	  }
+      }
+#endif
+
       glKosBeginFrame ();
       
 #if 0
@@ -589,9 +640,9 @@ main (int argc, char *argv[])
       
       light_pos[0] = cosf (rot1) * 10;
       light_pos[2] = sinf (rot1) * 10;
-      light_pos[1] = 2.0f;
+      light_pos[1] = 0.0f;
       
-      rot1 += 0.05;
+      rot1 += 0.005;
       if (rot1 > 2 * M_PI)
         rot1 -= 2 * M_PI;
       
@@ -616,9 +667,9 @@ main (int argc, char *argv[])
 
       glDisable (GL_TEXTURE_2D);
       glPushMatrix ();
-      glScalef (0.8 + 0.2 * sinf (rot2 + 0.5),
+     /* glScalef (0.8 + 0.2 * sinf (rot2 + 0.5),
 		0.8 + 0.2 * sinf (rot2 + 0.5),
-		0.8 + 0.2 * sinf (rot2 + 0.5));
+		0.8 + 0.2 * sinf (rot2 + 0.5)); */
       glRotatef (rot3, 0.0, 1.0, 0.0);
       glRotatef (rot4, 1.0, 0.0, 0.0);
       /*render_geosphere (spherestrips, 0);*/
@@ -664,9 +715,9 @@ main (int argc, char *argv[])
       
       glEnable (GL_TEXTURE_2D);
       glPushMatrix ();
-      glScalef (0.8 + 0.2 * sinf (rot2 + 0.5),
+    /*  glScalef (0.8 + 0.2 * sinf (rot2 + 0.5),
 		0.8 + 0.2 * sinf (rot2 + 0.5),
-		0.8 + 0.2 * sinf (rot2 + 0.5));
+		0.8 + 0.2 * sinf (rot2 + 0.5)); */
       glRotatef (rot3, 0.0, 1.0, 0.0);
       glRotatef (rot4, 1.0, 0.0, 0.0);
       //render_geosphere (spherestrips, 1);

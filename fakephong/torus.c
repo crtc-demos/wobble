@@ -146,9 +146,11 @@ torus_create (float outer, float inner, int minor_steps, int major_steps)
 
       str->start = vert;
       str->normals = norm;
+      str->texcoords = NULL;
       str->length = vout;
       str->inverse = 0;
-      str->attrs = NULL;
+      str->v_attrs = NULL;
+      str->s_attrs = NULL;
       str->next = NULL;
 
       end = str;

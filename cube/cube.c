@@ -152,9 +152,9 @@ init_pvr (void)
   pvr_init_params_t params = {
     { PVR_BINSIZE_8,	/* Opaque polygons.  */
       PVR_BINSIZE_0,	/* Opaque modifiers.  */
-      PVR_BINSIZE_0,	/* Translucent polygons.  */
+      PVR_BINSIZE_8,	/* Translucent polygons.  */
       PVR_BINSIZE_0,	/* Translucent modifiers.  */
-      PVR_BINSIZE_8 },	/* Punch-thrus.  */
+      PVR_BINSIZE_0 },	/* Punch-thrus.  */
     512 * 1024,		/* Vertex buffer size 512K.  */
     0,			/* No DMA.  */
     0			/* No FSAA.  */
@@ -164,6 +164,35 @@ init_pvr (void)
 }
 
 static matrix_t objmatrix __attribute__((aligned(32)));
+
+void auto_orient (void)
+{
+  int face;
+  
+  for (face = 0; face < 6; face++)
+    {
+      float u[3], a_minus_b[3], a_minus_c[3];
+      
+      vec_sub (a_minus_b, points[tristrips[face][0]],
+	       points[tristrips[face][1]]);
+      vec_scale (a_minus_b, a_minus_b, texcoords[0][1] - texcoords[2][1]);
+      vec_sub (a_minus_c, points[tristrips[face][0]],
+	       points[tristrips[face][2]]);
+      vec_scale (a_minus_c, a_minus_c, texcoords[0][1] - texcoords[1][1]);
+      vec_sub (u, a_minus_b, a_minus_c);
+      /* Not really sure if this is right.  */
+      if (((texcoords[0][0] - texcoords[1][0])
+	    * (texcoords[0][1] - texcoords[2][1])
+	   - (texcoords[0][0] - texcoords[2][0])
+	      * (texcoords[0][1] - texcoords[1][1])) < 0.0f)
+	vec_scale (u, u, -1.0f);
+      vec_normalize (u, u);
+
+      printf ("face %d: calculated [ %f %f %f ]\n", face, u[0], u[1], u[2]);
+      printf ("  previously [ %f %f %f ]\n", face_orient[face][0],
+	      face_orient[face][1], face_orient[face][2]);
+    }
+}
 
 int
 main (int argc, char *argv[])
@@ -190,6 +219,8 @@ main (int argc, char *argv[])
     vid_init (DM_640x480_PAL_IL, PM_RGB565);
   
   init_pvr ();
+  
+  auto_orient ();
   
   png_to_img ("/rd/cube.png", PNG_NO_ALPHA, &cubetxr);
   
@@ -238,7 +269,7 @@ main (int argc, char *argv[])
                     128, 128, bumpmap, PVR_FILTER_BILINEAR);*/
   glKosTex2D (GL_BUMP_TWID, 128, 128, bumpmap);
 
-  glTexEnvi (GL_TEXTURE_2D, GL_TEXTURE_ENV_MODE, GL_DECAL);
+  glTexEnvi (GL_TEXTURE_2D, GL_TEXTURE_ENV_MODE, GL_MODULATE);
 
   /* Break the nice abstraction.  Tweak for bump mapping.  */
   /*cxt = (pvr_poly_cxt_t *) texture[1];
@@ -289,9 +320,6 @@ main (int argc, char *argv[])
       printf ("[ %f %f %f %f ]\n", objmatrix[3][0], objmatrix[3][1],
 				   objmatrix[3][2], objmatrix[3][3]);*/
 
-      glBindTexture (GL_TEXTURE_2D, texture[1]);
-      glEnable (GL_KOS_OFFSET_COLOR);
-      
       /* Do these all in one go.  */
       mat_load ((matrix_t *) &objmatrix[0][0]);
 
@@ -318,6 +346,38 @@ main (int argc, char *argv[])
 	  transformed_orient[faces][2] = z;
 	}
       glKosMatrixDirty ();
+
+      glDisable (GL_KOS_OFFSET_COLOR);
+      glBindTexture (GL_TEXTURE_2D, texture[0]);
+      glDisable (GL_TEXTURE_2D);
+      //glBlendFunc (GL_DST_COLOR, GL_ZERO);
+      glBlendFunc (GL_ONE, GL_ZERO);
+
+      for (faces = 0; faces < 6; faces++)
+        {
+	  int strip;
+	  	  
+	  glBegin (GL_TRIANGLE_STRIP);
+
+	  glColor4ub (colour[faces][0], colour[faces][1], colour[faces][2],
+		      colour[faces][3]);
+
+	  for (strip = 0; strip < 4; strip++)
+	    {
+	      glTexCoord2fv (texcoords[strip]);
+	      glVertex3fv (points[tristrips[faces][strip]]);
+	    }
+	  
+	  glEnd ();
+	}
+
+      /* Finish opaque list, start transparent list.  */
+      glKosFinishList ();
+
+      glBindTexture (GL_TEXTURE_2D, texture[1]);
+      glEnable (GL_TEXTURE_2D);
+      glEnable (GL_KOS_OFFSET_COLOR);
+      glBlendFunc (GL_ZERO, GL_SRC_ALPHA);
       
       for (faces = 0; faces < 6; faces++)
         {
@@ -367,7 +427,7 @@ main (int argc, char *argv[])
 	  glBegin (GL_TRIANGLE_STRIP);
 
 	  set_bump_direction (t, 2 * M_PI - q, 1.0);
-	  glColor4ub (0, 0, 0, 0);
+	  glColor4ub (255, 255, 255, 255);
 
 	  for (strip = 0; strip < 4; strip++)
 	    {
@@ -378,33 +438,8 @@ main (int argc, char *argv[])
 	  glEnd ();
 	}
 
-      glDisable (GL_KOS_OFFSET_COLOR);
       /* Finish opaque polygon list, start translucent polygon list.  */
      /* glKosFinishList ();*/
-
-      /* Finish translucent polygon list, start punchthru list.  */
-      glKosFinishList ();
-
-      glBindTexture (GL_TEXTURE_2D, texture[0]);
-      glBlendFunc (GL_DST_COLOR, GL_ZERO);
-      
-      for (faces = 0; faces < 6; faces++)
-        {
-	  int strip;
-	  	  
-	  glBegin (GL_TRIANGLE_STRIP);
-
-	  glColor4ub (colour[faces][0], colour[faces][1], colour[faces][2],
-		      colour[faces][3]);
-
-	  for (strip = 0; strip < 4; strip++)
-	    {
-	      glTexCoord2fv (texcoords[strip]);
-	      glVertex3fv (points[tristrips[faces][strip]]);
-	    }
-	  
-	  glEnd ();
-	}
 
       glPopMatrix ();
                   

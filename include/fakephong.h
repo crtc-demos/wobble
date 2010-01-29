@@ -8,6 +8,7 @@ typedef struct
   pvr_ptr_t highlight;
   unsigned int xsize;
   unsigned int ysize;
+  int intensity;
 } fakephong_info;
 
 typedef struct
@@ -24,7 +25,8 @@ extern void fakephong_highlight_texture (pvr_ptr_t highlight,
 					 unsigned int ysize, float hardness);
 
 extern unsigned long lightsource_diffuse (const float *, const float *,
-					  struct colour *, struct colour *,
+					  const struct colour *,
+					  const struct colour *,
 					  const float *);
 
 extern void lightsource_fake_phong (float *, float *, const float *,

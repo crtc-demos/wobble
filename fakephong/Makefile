@@ -1,17 +1,17 @@
 
 	CC =		kos-cc
-	CFLAGS =	-O2
+	CFLAGS =	-O3 -fomit-frame-pointer
 	INCLUDE =	-I../include
 	STRIP =		kos-strip
 	DEPFLAGS =	-DDREAMCAST_KOS -D_arch_dreamcast
 	GENROMFS =	$(KOS_GENROMFS)
 
-	OBJS =		geosphere.o torus.o phongtest.o romdisk.o
+	OBJS =		geosphere.o torus.o cube.o phongtest.o romdisk.o
 	ROMDISK =	romdisk.img
 
 	TARGET =	fakephong.elf
 
-	SRC =		geosphere.c torus.c phongtest.c
+	SRC =		geosphere.c torus.c cube.c phongtest.c
 
 .PHONY:	.depend
 

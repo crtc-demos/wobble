@@ -27,7 +27,7 @@ restrip_list (strip *strips_in, strip_classify_fn fn, strip *strip_starts[],
       
       for (i = 0; i < strip_ptr->length - 2; i++)
         {
-	  vertex_attrs *attrs = &strip_ptr->attrs[i];
+	  vertex_attrs *attrs = &strip_ptr->v_attrs[i];
 	  int class = fn (&(*strip_ptr->start)[i], (i & 1) == 1, attrs);
 	  
 	  if (class == current_class)
@@ -60,9 +60,13 @@ restrip_list (strip *strips_in, strip_classify_fn fn, strip *strip_starts[],
 		  else
 		    newptr->inverse = strip_ptr->inverse;
 
-		  newptr->attrs = &strip_ptr->attrs[start_pos];
+		  newptr->v_attrs = &strip_ptr->v_attrs[start_pos];
+		  newptr->s_attrs = strip_ptr->s_attrs;
 		  newptr->normals = (float (*)[][3])
 				    &(*strip_ptr->normals)[start_pos];
+		  newptr->texcoords = (strip_ptr->texcoords)
+		    ? (float (*)[][2]) &(*strip_ptr->texcoords)[start_pos]
+		    : NULL;
 		  
 		  strip_ends[current_class] = newptr;
 		  if (strip_starts[current_class] == NULL)
@@ -103,8 +107,11 @@ restrip_list (strip *strips_in, strip_classify_fn fn, strip *strip_starts[],
 	  else
 	    newptr->inverse = strip_ptr->inverse;
 
-	  newptr->attrs = &strip_ptr->attrs[start_pos];
+	  newptr->v_attrs = &strip_ptr->v_attrs[start_pos];
+	  newptr->s_attrs = strip_ptr->s_attrs;
 	  newptr->normals = (float (*)[][3]) &(*strip_ptr->normals)[start_pos];
+	  newptr->texcoords = (strip_ptr->texcoords)
+	    ? (float (*)[][2]) &(*strip_ptr->texcoords)[start_pos] : NULL;
 	  
 	  strip_ends[current_class] = newptr;
 	  if (strip_starts[current_class] == NULL)

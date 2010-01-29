@@ -111,8 +111,9 @@ fakephong_texcoords (float *u, float *v, float reflection[3],
 }
 
 unsigned long
-lightsource_diffuse (const float *vert, const float *norm, colour *ambient_col,
-		     colour *pigment_col, const float *light_pos)
+lightsource_diffuse (const float *vert, const float *norm,
+		     const colour *ambient_col, const colour *pigment_col,
+		     const float *light_pos)
 {
   float light_to_vertex[3];
   float out;
