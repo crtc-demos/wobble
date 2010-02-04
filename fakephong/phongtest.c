@@ -507,7 +507,7 @@ main (int argc, char *argv[])
   /* It's not really very accurately named at the moment.  */
   sphobj = /*geosphere_create (2);*/ torus_create (1.0, 0.4, 16, 32);
   sphobj->cel_shading = &celinfo;
-  /*sphobj->fake_phong = &f_phong;*/
+  sphobj->fake_phong = &f_phong;
   
   {
     png_load_texture ("/rd/white.png", &celinfo.texture, PNG_NO_ALPHA,

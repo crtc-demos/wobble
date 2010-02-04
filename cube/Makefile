@@ -9,7 +9,7 @@
 
 	OBJS =	cube.o rom.o
 
-	TARGET = cube
+	TARGET = cube.elf
 
 	SRC =	cube.c
 
