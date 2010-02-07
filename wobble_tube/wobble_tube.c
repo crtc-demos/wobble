@@ -26,7 +26,7 @@ extern uint8 romdisk[];
 KOS_INIT_FLAGS (INIT_DEFAULT);
 KOS_INIT_ROMDISK (romdisk);
 
-float light_pos[] = {-0.5, 0.5, -3.0};
+float light_pos[] = {5, -5, -15};
 float light_updir[] = {0.0, 1.0, 0.0};
 float eye_pos[] = {0.0, 0.0, -4.5};
 
