@@ -44,6 +44,7 @@ object_create_default (strip *strips)
   newobj->fake_phong = NULL;
   newobj->env_map = NULL;
   newobj->bump_map = NULL;
+  newobj->cel_shading = NULL;
   
   return newobj;
 }

@@ -31,7 +31,7 @@ static __inline__ void
 vec_normalize (FLOAT_TYPE *dst, const FLOAT_TYPE *in)
 {
 #ifdef DC_FAST_MATHS
-  FLOAT_TYPE mag = fipr_magnitude_sqr (in[0], in[1], in[2], 0.0);
+  FLOAT_TYPE mag = __fipr_magnitude_sqr (in[0], in[1], in[2], 0.0);
   FLOAT_TYPE rsqrt_mag = frsqrt (mag);
   dst[0] = in[0] * rsqrt_mag;
   dst[1] = in[1] * rsqrt_mag;
