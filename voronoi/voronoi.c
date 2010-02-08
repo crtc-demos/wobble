@@ -473,6 +473,22 @@ static float xpos[NUMBER], ypos[NUMBER];
 static float dx[NUMBER], dy[NUMBER];
 static float pt_red[NUMBER], pt_green[NUMBER], pt_blue[NUMBER];
 
+#define CLAMPING 0
+
+static float clamp (float val, float max)
+{
+#if CLAMPING
+  if (val > max)
+    return max;
+  else if (val < -max)
+    return -max;
+  else
+    return val;
+#else
+  return val;
+#endif
+}
+
 int
 main (int argc, char *argv[])
 {
@@ -539,9 +555,10 @@ main (int argc, char *argv[])
 	  /*float r = ypos[i] / 240.0f;
 	  float g = ypos[i] / 480.0f;
 	  float b = (320 - abs (xpos[i] - 320)) / 320.0f - 1.5 + g;*/
-	  float want_x, want_y;
+	  float want_x, want_y, have_x, have_y;
 	  float want_angle, have_angle, want_magn, have_magn;
 	  float want_red, want_green, want_blue;
+	  float angle_diff, magn_diff, red_diff, green_diff, blue_diff;
 	  uint32_t col;
 	  uint32_t want_colour;
 	  int ir, ig, ib;
@@ -591,25 +608,33 @@ main (int argc, char *argv[])
           want_x -= 320.0f;
 	  want_y -= 240.0f;
 
+	  have_x = xpos[i] - 320.0;
+	  have_y = ypos[i] - 240.0;
+
           want_angle = atan2 (want_y, want_x);
-	  have_angle = atan2 (ypos[i] - 240.0, xpos[i] - 320.0);
+	  have_angle = atan2 (have_y, have_x);
 	  
 	  if ((have_angle - want_angle) > M_PI)
-	    have_angle -= 2 * M_PI;
-	  if ((have_angle - want_angle) < -M_PI)
 	    have_angle += 2 * M_PI;
+	  if ((have_angle - want_angle) < -M_PI)
+	    have_angle -= 2 * M_PI;
 	  
-	  have_magn = sqrtf (want_x * want_x + want_y * want_y);
+	  have_magn = sqrtf (have_x * have_x + have_y * have_y);
 	  want_magn = sqrtf (want_x * want_x + want_y * want_y);
 	  
-	  have_angle += (want_angle - have_angle) / 32.0f;
-	  have_magn += (want_magn - have_magn) / 32.0f;
+	  angle_diff = (want_angle - have_angle) / 32.0f;
+	  have_angle += clamp (angle_diff, 0.02);
+	  magn_diff = (want_magn - have_magn) / 32.0f;
+	  have_magn += clamp (magn_diff, 5);
 
 	  xpos[i] = 320.0 + have_magn * cosf (have_angle);
 	  ypos[i] = 240.0 + have_magn * sinf (have_angle);
-	  pt_red[i] += (want_red - pt_red[i]) / 32.0f;
-	  pt_green[i] += (want_green - pt_green[i]) / 32.0f;
-	  pt_blue[i] += (want_blue - pt_blue[i]) / 32.0f;
+	  red_diff = (want_red - pt_red[i]) / 32.0f;
+	  pt_red[i] += clamp (red_diff, 0.005);
+	  green_diff = (want_green - pt_green[i]) / 32.0f;
+	  pt_green[i] += clamp (green_diff, 0.005);
+	  blue_diff = (want_blue - pt_blue[i]) / 32.0f;
+	  pt_blue[i] += clamp (blue_diff, 0.005);
 	  
 	  ir = pt_red[i] * 255.0f;
 	  ig = pt_green[i] * 255.0f;
