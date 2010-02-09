@@ -6,6 +6,8 @@
 #include <GL/glu.h>
 
 #include "vector.h"
+#include "object.h"
+#include "palette.h"
 
 #define XSIZE 64
 #define YSIZE 64
@@ -159,39 +161,93 @@ set_colour (float norm[3])
   glColor3f (amt, amt, amt);
 }
 
+object *
+allocate_water (unsigned int xsize, unsigned int ysize)
+{
+  strip *previous = NULL;
+  int y;
+
+  for (y = 1; y < ysize - 2; y++)
+    {
+      strip *newstrip = strip_cons (previous, (xsize - 3) * 2,
+				    ALLOC_GEOMETRY | ALLOC_NORMALS);
+      previous = newstrip;
+    }
+
+  return object_create_default (previous);
+}
+
+#define USE_GL 0
+
 void
-draw_water (int clockwise)
+draw_water (object *obj, int clockwise)
 {
   unsigned int i, j;
   const float yfac = sin (M_PI / 3.0);
   const float iscale = 1.0 / (float) XSIZE, jscale = yfac / (float) YSIZE;
   const float ihalf = iscale / 2.0;
-  
+  strip *mystrip = obj->striplist;
+
+#if USE_GL
   glPushMatrix ();
   glScalef (3, 0.5, 3);
+#endif
   
   for (j = 1; j < YSIZE - 2; j++)
     {
       float js = (float) j * jscale;
+      float (*geom)[][3] = mystrip->start;
+      float (*norm)[][3] = mystrip->normals;
       
-      glBegin (GL_TRIANGLE_STRIP);
+      mystrip->inverse = 1;
+      
+      assert (mystrip);
+      assert (geom);
+      assert (norm);
+      
+      /*glBegin (GL_TRIANGLE_STRIP);*/
 
       for (i = 1; i < XSIZE - 2; i++)
         {
 	  float is = (float) i * iscale + (float) j * ihalf;
+	  int idx = (i - 1) * 2;
 
+#if USE_GL
 	  set_colour (normals[j][i]);
           if (!clockwise && i == 1)
 	    glVertex3f (is, pos[j][i], js);
 	  glVertex3f (is, pos[j][i], js);
 	  set_colour (normals[j + 1][i]);
 	  glVertex3f (is + ihalf, pos[j + 1][i], js + jscale);
+#else
+	  (*geom)[idx][0] = is * 3;
+	  (*geom)[idx][1] = pos[j][i] * 0.5;
+	  (*geom)[idx][2] = js * 3;
+	  
+	  (*norm)[idx][0] = normals[j][i][0];
+	  (*norm)[idx][1] = normals[j][i][1];
+	  (*norm)[idx][2] = normals[j][i][2];
+
+	  (*geom)[idx + 1][0] = (is + ihalf) * 3;
+	  (*geom)[idx + 1][1] = pos[j + 1][i] * 0.5;
+	  (*geom)[idx + 1][2] = (js + jscale) * 3;
+
+	  (*norm)[idx + 1][0] = normals[j + 1][i][0];
+	  (*norm)[idx + 1][1] = normals[j + 1][i][1];
+	  (*norm)[idx + 1][2] = normals[j + 1][i][2];
+#endif
 	}
 
+#if USE_GL
       glEnd ();
+#else
+      mystrip = mystrip->next;
+#endif
     }
 
+#if USE_GL
   glPopMatrix ();
+#endif
 }
 
 extern uint8 romdisk[];
@@ -199,13 +255,26 @@ extern uint8 romdisk[];
 KOS_INIT_FLAGS (INIT_DEFAULT);
 KOS_INIT_ROMDISK (romdisk);
 
+//float light_pos[] = {5, -5, -15};
+float light_pos[] = {6.062, 2, 3.5};
+float light_updir[] = {0.0, 1.0, 0.0};
+float eye_pos[] = {-0.866, 0.75, -0.5};
+
+static matrix_t camera __attribute__((aligned(32)));
+static matrix_t invcamera __attribute__((aligned(32)));
+static matrix_t projection __attribute__((aligned(32)));
+static matrix_t mview __attribute__((aligned(32)));
+static matrix_t normxform __attribute__((aligned(32)));
+
+pvr_ptr_t highlight = 0;
+
 static void
 init_pvr (void)
 {
   pvr_init_params_t params = {
     { PVR_BINSIZE_32,	/* Opaque polygons.  */
       PVR_BINSIZE_0,	/* Opaque modifiers.  */
-      PVR_BINSIZE_0,	/* Translucent polygons.  */
+      PVR_BINSIZE_32,	/* Translucent polygons.  */
       PVR_BINSIZE_0,	/* Translucent modifiers.  */
       PVR_BINSIZE_0 },	/* Punch-thrus.  */
     2 * 1024 * 1024,	/* Vertex buffer size 4MB.  */
@@ -221,6 +290,11 @@ main (int argc, char *argv[])
 {
   int cable_type;
   int quit = 0;
+  object *water = allocate_water (XSIZE, YSIZE);
+  fakephong_info f_phong;
+  envmap_dual_para_info envmap;
+  kos_img_t front_txr, back_txr;
+  pvr_ptr_t texaddr;
 
   cable_type = vid_check_cable ();
 
@@ -230,6 +304,40 @@ main (int argc, char *argv[])
     vid_init (DM_640x480_PAL_IL, PM_RGB565);
 
   init_pvr ();
+
+#if 1
+  highlight = pvr_mem_malloc (256 * 256);
+  fakephong_highlight_texture (highlight, 256, 256, 10.0f);
+
+  f_phong.highlight = highlight;
+  f_phong.xsize = 256;
+  f_phong.ysize = 256;
+  f_phong.intensity = 128;
+  
+  water->fake_phong = &f_phong;
+#else
+  kmg_to_img ("/rd/sky1.kmg", &front_txr);
+  texaddr = pvr_mem_malloc (front_txr.byte_count);
+  pvr_txr_load_kimg (&front_txr, texaddr, PVR_TXRFMT_VQ_ENABLE);
+  envmap.front_txr = texaddr;
+  kos_img_free (&front_txr, 0);
+  
+  kmg_to_img ("/rd/sky2o.kmg", &back_txr);
+  texaddr = pvr_mem_malloc (back_txr.byte_count);
+  pvr_txr_load_kimg (&back_txr, texaddr, PVR_TXRFMT_VQ_ENABLE);
+  envmap.back_txr = texaddr;
+  kos_img_free (&back_txr, 0);
+  
+  envmap.xsize = front_txr.w;
+  envmap.ysize = front_txr.h;
+  
+  water->env_map = &envmap;
+#endif
+  
+  object_set_ambient (water, 0, 0, 64);
+  object_set_pigment (water, 0, 0, 255);
+  
+  palette_grey_ramp ();
 
   vid_border_color (0, 0, 0);
   pvr_set_bg_color (0.0, 0.0, 0.0);
@@ -250,11 +358,16 @@ main (int argc, char *argv[])
 		  1.0,			/* Z near.  */
 		  50.0);		/* Z far.  */
 
+  glGetFloatv (GL_PROJECTION_MATRIX, &projection[0][0]);
+
   glMatrixMode (GL_MODELVIEW);
   glLoadIdentity ();
-  gluLookAt (-0.866, 0.75, -0.5,		/* Eye position.  */
-	      0.866, 0.5,   0.5,		/* Centre.  */
-	      0.0,   1.0,   0.0);		/* Up.  */
+  gluLookAt (eye_pos[0], eye_pos[1], eye_pos[2],	/* Eye position.  */
+	     0.866, 0.5,   0.5,				/* Centre.  */
+	     0.0,   1.0,   0.0);			/* Up.  */
+
+  glGetFloatv (GL_MODELVIEW_MATRIX, &camera[0][0]);
+  vec_transpose_rotation (&invcamera[0][0], &camera[0][0]);
 
   init_grid ();
 
@@ -266,11 +379,19 @@ main (int argc, char *argv[])
       MAPLE_FOREACH_END ()
 
       glKosBeginFrame ();
-      
-      update_grid ();
-      draw_water (1);
 
+      update_grid ();
+      draw_water (water, 1);
+
+      glGetFloatv (GL_MODELVIEW_MATRIX, &mview[0][0]);
+      vec_normal_from_modelview (&normxform[0][0], &mview[0][0]);
+      object_render_immediate (water, 0, mview, normxform, projection, camera,
+			       invcamera, eye_pos, light_pos, light_updir);
+      
       glKosFinishList ();
+
+      object_render_immediate (water, 1, mview, normxform, projection, camera,
+			       invcamera, eye_pos, light_pos, light_updir);
 
       glKosFinishFrame ();
     }
