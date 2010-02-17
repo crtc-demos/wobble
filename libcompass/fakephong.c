@@ -61,6 +61,8 @@ fakephong_highlight_texture (pvr_ptr_t highlight, unsigned int xsize,
   free (tmphilight);
 }
 
+static matrix_t light_basis __attribute__((aligned(32)));
+
 /* LIGHT is the direction of the light from the vertex in question, and
    LIGHT_UPDIR is an "upwards" orientation vector for the light.  It doesn't
    have to be exactly perpendicular to the light vector, but it should be
@@ -73,10 +75,10 @@ fakephong_texcoords (float *u, float *v, float reflection[3],
 		     float *transformed_z)
 {
   float light_sideways[3], light_realup[3];
-  matrix_t light_basis;
-  float reflection4[4], x_reflection[4];
+  float x, y, z, w = 1.0f;
   
   vec_cross (light_sideways, light, light_updir);
+  vec_normalize (light_sideways, light_sideways);
   vec_cross (light_realup, light_sideways, light);
   
   light_basis[0][0] = light_sideways[0];
@@ -98,16 +100,16 @@ fakephong_texcoords (float *u, float *v, float reflection[3],
   light_basis[1][3] = 0.0;
   light_basis[2][3] = 0.0;
   light_basis[3][3] = 1.0;
-  
-  memcpy (reflection4, reflection, sizeof (float) * 3);
-  reflection4[3] = 1.0;
-  
-  vec_transform (x_reflection, (float *) light_basis, reflection4);
 
-  *transformed_z = x_reflection[2];
+  mat_load (&light_basis);
+  x = reflection[0];
+  y = reflection[1];
+  z = reflection[2];
+  mat_trans_nodiv (x, y, z, w);
 
-  *u = x_reflection[0] * 0.5 + 0.5;
-  *v = x_reflection[1] * 0.5 + 0.5;
+  *u = x * 0.5 + 0.5;
+  *v = y * 0.5 + 0.5;
+  *transformed_z = z;
 }
 
 unsigned long
@@ -118,8 +120,9 @@ lightsource_diffuse (const float *vert, const float *norm,
   float light_to_vertex[3];
   float out;
   int r, g, b;
+  float x, y, z, w = 1.0f;
 
-  vec_sub (light_to_vertex, vert, light_pos);
+  vec_sub (light_to_vertex, light_pos, vert);
   vec_normalize (light_to_vertex, light_to_vertex);
 
   out = vec_dot (light_to_vertex, norm);
@@ -138,13 +141,21 @@ lightsource_diffuse (const float *vert, const float *norm,
 void
 lightsource_fake_phong (float *vertex, float *norm, const float *light_pos,
 			const float *light_up, const float *eye_pos,
-			vertex_attrs *vertex_info, unsigned int idx)
+			matrix_t *invcamera, vertex_attrs *vertex_info,
+			unsigned int idx)
 {
   float norm_light[3];
   float eye_to_vertex[3], tmp[3], reflection[3];
+  float light_to_vertex[3];
   float eye_dot_norm;
+  float x, y, z, w = 1.0f;
   
-  vec_normalize (norm_light, light_pos);
+  /* FIXME: We need to transform the light position by the camera matrix, not
+     use the untransformed position (or the inverse-orientation part used for
+     env mapping).  */
+  
+  vec_sub (light_to_vertex, light_pos, vertex);
+  vec_normalize (norm_light, light_to_vertex);
   
   vec_sub (eye_to_vertex, eye_pos, vertex);
   vec_normalize (eye_to_vertex, eye_to_vertex);
@@ -152,11 +163,23 @@ lightsource_fake_phong (float *vertex, float *norm, const float *light_pos,
   eye_dot_norm = vec_dot (eye_to_vertex, norm);
   vec_scale (tmp, norm, 2.0 * eye_dot_norm);
   vec_sub (reflection, tmp, eye_to_vertex);
-    
-  fakephong_texcoords (&vertex_info[idx].fakephong.texc[0],
-		       &vertex_info[idx].fakephong.texc[1],
-		       reflection, norm_light, light_up,
-		       &vertex_info[idx].fakephong.transformed_z);
+  
+  /*mat_load (invcamera);
+  x = reflection[0];
+  y = reflection[1];
+  z = reflection[2];
+  mat_trans_nodiv (x, y, z, w);
+  reflection[0] = x;
+  reflection[1] = y;
+  reflection[2] = z;*/
+  
+  if (eye_dot_norm < 0)
+    vertex_info[idx].fakephong.transformed_z = -0.01;
+  else
+    fakephong_texcoords (&vertex_info[idx].fakephong.texc[0],
+			 &vertex_info[idx].fakephong.texc[1],
+			 reflection, norm_light, light_up,
+			 &vertex_info[idx].fakephong.transformed_z);
 }
 
 #if 0

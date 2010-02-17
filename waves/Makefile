@@ -1,6 +1,6 @@
 
 	CC =		kos-cc
-	CFLAGS =	-O3
+	CFLAGS =	-O3 -ffast-math -save-temps
 	INCLUDE =	-I../include
 	STRIP =		kos-strip
 	DEPFLAGS =	-DDREAMCAST_KOS -D_arch_dreamcast

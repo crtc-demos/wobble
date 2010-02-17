@@ -30,7 +30,7 @@ extern unsigned long lightsource_diffuse (const float *, const float *,
 					  const float *);
 
 extern void lightsource_fake_phong (float *, float *, const float *,
-				    const float *, const float *,
+				    const float *, const float *, matrix_t *,
 				    struct vertex_attrs *, unsigned int);
 
 extern int fakephong_classify_triangle (float[3][3], int,

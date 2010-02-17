@@ -29,6 +29,12 @@
 #include "perlin.h"
 #include "perlin-3d.h"
 
+/*
+#ifndef SLOW_PVR_PRIM
+#define pvr_prim (DATA, SIZE) sq_cpy ((void *) PVR_TA_INPUT, (DATA), (SIZE))
+#endif
+*/
+
 object *
 object_create_default (strip *strips)
 {
@@ -320,20 +326,10 @@ float amt = 0.0;
    Needs fixing!  */
 
 void
-object_render_immediate (const object *obj, int pass, matrix_t modelview,
-			 matrix_t normal_xform, matrix_t projection,
-			 matrix_t camera, matrix_t inv_camera_orientation,
-			 const float *eye_pos, const float *light0_pos,
-			 const float *light0_up)
+object_render_immediate (viewpoint *view, const object *obj,
+			 object_orientation *obj_orient, lighting *lights,
+			 int pass)
 {
-#define PDIV_SCREEN(OUT,IN)			\
-  ({						\
-    float recip_w = 1.0f / (IN)[3];		\
-    (OUT).x = 320 + 320 * ((IN)[0] * recip_w);	\
-    (OUT).y = 240 + 240 * ((IN)[1] * recip_w);	\
-    (OUT).z = recip_w;				\
-  })
-
   unsigned int strip_max = max_strip_length (obj), i;
   float (*trans)[][3], (*trans_norm)[][3];
   strip *str;
@@ -348,9 +344,9 @@ object_render_immediate (const object *obj, int pass, matrix_t modelview,
   
   if (obj->env_map)
     {
-      memcpy (eyepos4, eye_pos, sizeof (float) * 3);
+      memcpy (eyepos4, &view->eye_pos[0], sizeof (float) * 3);
       eyepos4[3] = 1.0;
-      vec_transform (&c_eyepos[0], &camera[0][0], &eyepos4[0]);
+      vec_transform (&c_eyepos[0], (float *) view->camera, &eyepos4[0]);
     }
   
   trans = malloc (sizeof (float) * 3 * strip_max);
@@ -360,7 +356,31 @@ object_render_immediate (const object *obj, int pass, matrix_t modelview,
     {
       strip transformed_strip;
 
-      /* This loop would benefit from assembly implementation.  */
+      mat_load (obj_orient->modelview);
+
+      for (i = 0; i < str->length; i++)
+        {
+	  float *vec = &(*str->start)[i][0], *outvec = &(*trans)[i][0];
+	  float x = vec[0], y = vec[1], z = vec[2], w = 1.0;
+	  mat_trans_nodiv (x, y, z, w);
+	  outvec[0] = x;
+	  outvec[1] = y;
+	  outvec[2] = z;
+	}
+
+      mat_load (obj_orient->normal_xform);
+
+      for (i = 0; i < str->length; i++)
+        {
+	  float *norm = &(*str->normals)[i][0], *outnorm = &(*trans_norm)[i][0];
+	  float x = norm[0], y = norm[1], z = norm[2], w = 1.0;
+	  mat_trans_nodiv (x, y, z, w);
+	  outnorm[0] = x;
+	  outnorm[1] = y;
+	  outnorm[2] = z;
+	}
+
+#if 0
       for (i = 0; i < str->length; i++)
         {
 	  float vert[4], x_vert[4], norm[4], x_norm[4];
@@ -368,11 +388,12 @@ object_render_immediate (const object *obj, int pass, matrix_t modelview,
 	  vert[3] = 1.0f;
 	  memcpy (norm, &(*str->normals)[i][0], sizeof (float) * 3);
 	  norm[3] = 1.0f;
-	  vec_transform (x_vert, (float *) modelview, vert);
+	  vec_transform (x_vert, (float *) obj_orient->modelview, vert);
 	  memcpy (&(*trans)[i][0], x_vert, sizeof (float) * 3);
-	  vec_transform (x_norm, (float *) normal_xform, norm);
+	  vec_transform (x_norm, (float *) obj_orient->normal_xform, norm);
 	  vec_normalize (&(*trans_norm)[i][0], x_norm);
 	}
+#endif
 
       transformed_strip.start = trans;
       transformed_strip.length = str->length;
@@ -402,10 +423,12 @@ object_render_immediate (const object *obj, int pass, matrix_t modelview,
 	      (&transformed_strip.v_attrs[i].env_map.texc_f[0],
 	       &transformed_strip.v_attrs[i].env_map.texc_b[0],
 	       (*transformed_strip.start)[i], (*transformed_strip.normals)[i],
-	       &c_eyepos[0], inv_camera_orientation);
+	       &c_eyepos[0], *(view->inv_camera_orientation));
 
 	  restrip_list (&transformed_strip, envmap_classify_triangle,
 			strip_starts, strip_ends, &stripbuf, &capacity);
+
+	  mat_load (view->projection);
 
 	  /* This way of doing things wastes a lot of time here (due to
 	     recalculation of above), and it's not really necessary.  Only
@@ -435,17 +458,20 @@ object_render_immediate (const object *obj, int pass, matrix_t modelview,
 
 		    for (i = 0; i < str_out->length; i++)
 		      {
-			float xvec[4], vec[4];
+			float *invec = &(*str_out->start)[i][0];
+			float x, y, z;
 			int last = (i == str_out->length - 1);
 
-			memcpy (vec, &(*str_out->start)[i], sizeof (float) * 3);
-			vec[3] = 1.0f;
-
-			vec_transform (&xvec[0], (float *) projection, &vec[0]);
-
+			x = invec[0];
+			y = invec[1];
+			z = invec[2];
+			mat_trans_single (x, y, z);
+			
 			vert.flags = (last) ? PVR_CMD_VERTEX_EOL
 					    : PVR_CMD_VERTEX;
-			PDIV_SCREEN (vert, xvec);
+			vert.x = x;
+			vert.y = y;
+			vert.z = z;
 			vert.u = str_out->v_attrs[i].env_map.texc_f[0];
 			vert.v = str_out->v_attrs[i].env_map.texc_f[1];
 			pvr_prim (&vert, sizeof (vert));
@@ -490,17 +516,20 @@ object_render_immediate (const object *obj, int pass, matrix_t modelview,
 
 	      for (i = 0; i < str_out->length; i++)
 		{
-		  float xvec[4], vec[4];
+		  float *invec = &(*str_out->start)[i][0];
+		  float x, y, z;
 		  int last = (i == str_out->length - 1);
 
-		  memcpy (vec, &(*str_out->start)[i], sizeof (float) * 3);
-		  vec[3] = 1.0f;
-
-		  vec_transform (&xvec[0], (float *) projection, &vec[0]);
+		  x = invec[0];
+		  y = invec[1];
+		  z = invec[2];
+		  mat_trans_single (x, y, z);
 
 		  vert.flags = (last) ? PVR_CMD_VERTEX_EOL
 				      : PVR_CMD_VERTEX;
-		  PDIV_SCREEN (vert, xvec);
+		  vert.x = x;
+		  vert.y = y;
+		  vert.z = z;
 		  vert.u = str_out->v_attrs[i].env_map.texc_b[0];
 		  vert.v = str_out->v_attrs[i].env_map.texc_b[1];
 		  pvr_prim (&vert, sizeof (vert));
@@ -531,23 +560,27 @@ object_render_immediate (const object *obj, int pass, matrix_t modelview,
 	  
 	  vert.oargb = 0;
 	  vert.argb = PVR_PACK_COLOR (1.0f, 1.0f, 1.0f, 1.0f);
-	  
+
+	  mat_load (view->projection);
+
 	  for (i = 0; i < str->length; i++)
 	    {
-	      float vec[4], xvec[4];
+	      float *invec = &(*trans)[i][0];
+	      float x, y, z;
 	      int last = (i == str->length - 1);
 
-	      memcpy (vec, &(*trans)[i][0], sizeof (float) * 3);
-	      vec[3] = 1.0f;
-
-	      vec_transform (&xvec[0], (float *) projection, &vec[0]);
+	      x = invec[0];
+	      y = invec[1];
+	      z = invec[2];
+	      mat_trans_single (x, y, z);
 
 	      vert.flags = (last) ? PVR_CMD_VERTEX_EOL : PVR_CMD_VERTEX;
 	      vert.argb = lightsource_diffuse (&(*trans)[i][0],
-					       &(*trans_norm)[i][0],
-					       &obj->ambient, &obj->pigment,
-					       light0_pos);
-	      PDIV_SCREEN (vert, xvec);
+		&(*trans_norm)[i][0], &obj->ambient, &obj->pigment,
+		&lights->light0_pos_xform[0]);
+	      vert.x = x;
+	      vert.y = y;
+	      vert.z = z;
 	      vert.u = 0;
 	      vert.v = 0;
 	      pvr_prim (&vert, sizeof (vert));
@@ -555,6 +588,8 @@ object_render_immediate (const object *obj, int pass, matrix_t modelview,
 		pvr_prim (&vert, sizeof (vert));
 	    }
 	}
+
+      mat_load (view->projection);
 
       /* First pass for cel shading (experimental).  */
       if (pass == 1 && obj->cel_shading)
@@ -588,32 +623,35 @@ object_render_immediate (const object *obj, int pass, matrix_t modelview,
 	  
 	  for (i = 0; i < str->length; i++)
 	    {
-	      float vec[4], xvec[4];
 	      int last = (i == str->length - 1);
 	      float fogginess;
+	      float *invec = &(*trans)[i][0];
+	      float x, y, z;
 
-	      memcpy (vec, &(*trans)[i][0], sizeof (float) * 3);
-	      vec[3] = 1.0f;
-
-	      vec_transform (&xvec[0], (float *) projection, &vec[0]);
+	      x = invec[0];
+	      y = invec[1];
+	      z = invec[2];
+	      mat_trans_single (x, y, z);
 
 	      vert.flags = (last) ? PVR_CMD_VERTEX_EOL : PVR_CMD_VERTEX;
 	      vert.argb = lightsource_diffuse (&(*trans)[i][0],
 					       &(*trans_norm)[i][0],
 					       &obj->ambient, &obj->pigment,
-					       light0_pos);
+					       &lights->light0_pos_xform[0]);
 	      fogginess
-	        = perlin_noise_2D (xvec[0] / 2.0 + amt,
-				   xvec[1] / 2.0 + amt / 2
-				   + xvec[2] / 2.0, 2) / 3.0;
+	        = perlin_noise_2D (x / 640.0 + amt,
+				   y / 480.0 + amt / 2
+				   + z / 2.0, 2) / 3.0;
 	      if (fogginess < 0.0)
 	        fogginess = 0.0;
 	      if (fogginess > 1.0)
 	        fogginess = 1.0;
-	      fogginess += (1.0 - fogginess) * (xvec[2] / 5.0);
+	      fogginess += (1.0 - fogginess) * (z / 5.0);
 	      	      
 	      vert.oargb = PVR_PACK_COLOR (fogginess, 0.0, 0.0, 0.0);
-	      PDIV_SCREEN (vert, xvec);
+	      vert.x = x;
+	      vert.y = y;
+	      vert.z = z;
 	      vert.u = 0;
 	      vert.v = 0;
 	      pvr_prim (&vert, sizeof (vert));
@@ -647,18 +685,23 @@ object_render_immediate (const object *obj, int pass, matrix_t modelview,
 	  
 	  pvr_poly_compile (&hdr, &cxt);
 	  
+	  /* Note: lightsource_fake_phong destroys xmtrx!  */
 	  for (i = 0; i < str->length; i++)
 	    lightsource_fake_phong ((float *) &(*trans)[i][0],
-				    (float *) &(*trans_norm)[i][0], light0_pos,
-				    light0_up, eye_pos,
+				    (float *) &(*trans_norm)[i][0],
+				    &lights->light0_pos_xform[0],
+				    &lights->light0_up_xform[0],
+				    &view->eye_pos[0],
+				    view->inv_camera_orientation,
 				    transformed_strip.v_attrs, i);
 
 	  restrip_list (&transformed_strip, fakephong_classify_triangle,
 			strip_starts, strip_ends, &stripbuf, &capacity);
 
+	  mat_load (view->projection);
+
 	  for (str_out = strip_starts[0]; str_out; str_out = str_out->next)
             {
-	      float xvec[4];
 	      unsigned int i;
 	      pvr_vertex_t vert;
 
@@ -672,16 +715,19 @@ object_render_immediate (const object *obj, int pass, matrix_t modelview,
 
 	      for (i = 0; i < str_out->length; i++)
 		{
-		  float vec[4];
+		  float *invec = &(*str_out->start)[i][0];
+		  float x, y, z;
 		  int last = (i == str_out->length - 1);
 
-		  memcpy (vec, &(*str_out->start)[i], sizeof (float) * 3);
-		  vec[3] = 1.0f;
-
-		  vec_transform (&xvec[0], (float *) projection, &vec[0]);
+		  x = invec[0];
+		  y = invec[1];
+		  z = invec[2];
+		  mat_trans_single (x, y, z);
 
 		  vert.flags = (last) ? PVR_CMD_VERTEX_EOL : PVR_CMD_VERTEX;
-		  PDIV_SCREEN (vert, xvec);
+		  vert.x = x;
+		  vert.y = y;
+		  vert.z = z;
 		  vert.u = str_out->v_attrs[i].fakephong.texc[0];
 		  vert.v = str_out->v_attrs[i].fakephong.texc[1];
 		  pvr_prim (&vert, sizeof (vert));
@@ -725,7 +771,7 @@ object_render_immediate (const object *obj, int pass, matrix_t modelview,
 	     of the modelview matrix, not the same inverse-transposed.
 	     Otherwise maybe change the frame of reference and use one of the
 	     other available matrices, or something.  */
-	  vec_transform (x_orient, (float *) normal_xform, orient);
+	  vec_transform (x_orient, (float *) obj_orient->normal_xform, orient);
 	  
 	  pvr_prim (&hdr, sizeof (hdr));
 	  
@@ -737,9 +783,10 @@ object_render_immediate (const object *obj, int pass, matrix_t modelview,
 	      float d_cross_r[3], dxr_len, d_len, q;
 	      int over_pi, over_2pi;
 	      int last = (i == transformed_strip.length - 1);
-	      float xvec[4], vec[4];
+	      float *invec = &(*trans)[i][0];
+	      float x, y, z;
 	      
-	      vec_sub (light_incident, &(*trans)[i][0], light0_pos);
+	      vec_sub (light_incident, &(*trans)[i][0], &lights->light0_pos[0]);
 	      vec_normalize (light_incident, light_incident);
 	      
 	      s_dot_n = vec_dot (&(*trans_norm)[i][0], light_incident);
@@ -773,13 +820,17 @@ object_render_immediate (const object *obj, int pass, matrix_t modelview,
 	      vert.oargb = bumpmap_set_bump_direction (t, 2 * M_PI - q,
 			     obj->bump_map->intensity);
 
-	      memcpy (vec, &(*trans)[i][0], sizeof (float) * 3);
-	      vec[3] = 1.0f;
+	      mat_load (view->projection);
 
-	      vec_transform (&xvec[0], (float *) projection, &vec[0]);
+	      x = invec[0];
+	      y = invec[1];
+	      z = invec[2];
+	      mat_trans_single (x, y, z);
 
 	      vert.flags = (last) ? PVR_CMD_VERTEX_EOL : PVR_CMD_VERTEX;
-	      PDIV_SCREEN (vert, xvec);
+	      vert.x = x;
+	      vert.y = y;
+	      vert.z = z;
 	      vert.u = (*transformed_strip.texcoords)[i][0];
 	      vert.v = (*transformed_strip.texcoords)[i][1];
 	      pvr_prim (&vert, sizeof (vert));
@@ -793,6 +844,34 @@ object_render_immediate (const object *obj, int pass, matrix_t modelview,
   free (trans);
   free (trans_norm);
 
+  glKosMatrixDirty ();
+
   amt += 0.01;
-#undef PDIV_SCREEN
+}
+
+strip *
+strip_cons (strip *prev, unsigned int length, unsigned int alloc_bits)
+{
+  strip *newstrip = malloc (sizeof (strip));
+  float (*geom)[][3] = NULL;
+  float (*norms)[][3] = NULL;
+  float (*texcoords)[][2] = NULL;
+  
+  if (alloc_bits & ALLOC_GEOMETRY)
+    geom = malloc (3 * sizeof (float) * length);
+  if (alloc_bits & ALLOC_NORMALS)
+    norms = malloc (3 * sizeof (float) * length);
+  if (alloc_bits & ALLOC_TEXCOORDS)
+    texcoords = malloc (2 * sizeof (float) * length);
+
+  newstrip->start = geom;
+  newstrip->normals = norms;
+  newstrip->texcoords = texcoords;
+  newstrip->length = length;
+  newstrip->inverse = 0;
+  newstrip->v_attrs = NULL;
+  newstrip->s_attrs = NULL;
+  newstrip->next = prev;
+  
+  return newstrip;
 }

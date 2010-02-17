@@ -26,15 +26,23 @@ extern uint8 romdisk[];
 KOS_INIT_FLAGS (INIT_DEFAULT);
 KOS_INIT_ROMDISK (romdisk);
 
-float light_pos[] = {5, -5, -15};
+float light_pos[] = {0, 0, -4.5};
 float light_updir[] = {0.0, 1.0, 0.0};
-float eye_pos[] = {0.0, 0.0, -4.5};
+float eye_pos[] = {0.0, 0.0, 4.5};
 
 static matrix_t camera __attribute__((aligned(32)));
 static matrix_t invcamera __attribute__((aligned(32)));
 static matrix_t projection __attribute__((aligned(32)));
 static matrix_t mview __attribute__((aligned(32)));
 static matrix_t normxform __attribute__((aligned(32)));
+
+static matrix_t screen_mat __attribute__((aligned(32))) =
+  {
+    { 320.0,  0,     0, 0 },
+    { 0,     -240.0, 0, 0 },
+    { 0,      0,     1, 0 },
+    { 320.0,  240.0, 0, 1 }
+  };
 
 pvr_ptr_t highlight = 0;
 
@@ -63,19 +71,8 @@ allocate_tube (int rows, int segments)
   
   for (r = 0; r < rows; r++)
     {
-      strip *newstrip = malloc (sizeof (strip));
-      float (*str)[][3] = malloc (3 * sizeof (float) * (segments * 2 + 2));
-      float (*normals)[][3] = malloc (3 * sizeof (float) * (segments * 2 + 2));
-      
-      newstrip->start = str;
-      newstrip->normals = normals;
-      newstrip->texcoords = NULL;
-      newstrip->length = segments * 2 + 2;
-      newstrip->inverse = 0;
-      newstrip->v_attrs = NULL;
-      newstrip->s_attrs = NULL;
-      newstrip->next = prev_strip;
-      
+      strip *newstrip = strip_cons (prev_strip, segments * 2 + 2,
+				    ALLOC_GEOMETRY | ALLOC_NORMALS);
       prev_strip = newstrip;
     }
   
@@ -101,6 +98,7 @@ fill_tube_data (object *obj, int rows, int segments, float rot1)
       
       str = strlist->start;
       norm = strlist->normals;
+      strlist->inverse = 1;
       
       for (s = 0; s <= segments; s++)
         {
@@ -121,11 +119,11 @@ fill_tube_data (object *obj, int rows, int segments, float rot1)
 	  norma[1] = 0.35 * fcos (ang0);
 	  norma[2] = sinang;
 	  
-	  vec_normalize (&(*norm)[s * 2], &norma[0]);
+	  vec_normalize (&(*norm)[s * 2][0], &norma[0]);
 	  
 	  norma[1] = 0.35 * fcos (ang1);
 
-	  vec_normalize (&(*norm)[s * 2 + 1], &norma[0]);
+	  vec_normalize (&(*norm)[s * 2 + 1][0], &norma[0]);
 	}
       
       strlist = strlist->next;
@@ -144,7 +142,10 @@ main (int argc, char *argv[])
   int quit = 0;
   object *tube = allocate_tube (ROWS, SEGMENTS);
   fakephong_info f_phong;
-  
+  viewpoint view;
+  object_orientation obj_orient;
+  lighting lights;
+
   cable_type = vid_check_cable ();
   if (cable_type == CT_VGA)
     vid_init (DM_640x480_VGA, PM_RGB565);
@@ -185,6 +186,11 @@ main (int argc, char *argv[])
 
   glGetFloatv (GL_PROJECTION_MATRIX, &projection[0][0]);
 
+  mat_load (&screen_mat);
+  mat_apply (&projection);
+  mat_store (&projection);
+  glKosMatrixDirty ();
+
   glMatrixMode (GL_MODELVIEW);
   glLoadIdentity ();
   gluLookAt (eye_pos[0], eye_pos[1], eye_pos[2],	/* Eye position.  */
@@ -193,6 +199,17 @@ main (int argc, char *argv[])
   
   glGetFloatv (GL_MODELVIEW_MATRIX, &camera[0][0]);
   vec_transpose_rotation (&invcamera[0][0], &camera[0][0]);
+  
+  view.projection = &projection;
+  view.camera = &camera;
+  view.inv_camera_orientation = &invcamera;
+  memcpy (&view.eye_pos[0], &eye_pos[0], 3 * sizeof (float));
+  
+  obj_orient.modelview = &mview;
+  obj_orient.normal_xform = &normxform;
+  
+  memcpy (&lights.light0_pos[0], &light_pos[0], 3 * sizeof (float));
+  memcpy (&lights.light0_up[0], &light_updir[0], 3 * sizeof (float));
   
   /* glGenTextures (1, &texture[0]); */
 
@@ -204,25 +221,77 @@ main (int argc, char *argv[])
   
   while (!quit)
     {
+      float pushx = 0.0, pushy = 0.0;
+
       MAPLE_FOREACH_BEGIN (MAPLE_FUNC_CONTROLLER, cont_state_t, st)
         if (st->buttons & CONT_START)
 	  quit = 1;
+	pushx = st->joyx / 25.0;
+	pushy = (st->joyy / 25.0) + 2.0;
       MAPLE_FOREACH_END ()
 
       fill_tube_data (tube, ROWS, SEGMENTS, rot1);
 
       glKosBeginFrame ();
 
+      glKosMatrixDirty ();
+
+      glPushMatrix ();
+      glTranslatef (pushx, 0, pushy);
       glGetFloatv (GL_MODELVIEW_MATRIX, &mview[0][0]);
       vec_normal_from_modelview (&normxform[0][0], &mview[0][0]);
-      object_render_immediate (tube, 0, mview, normxform, projection, camera,
-			       invcamera, eye_pos, light_pos, light_updir);
+      object_render_immediate (&view, tube, &obj_orient, &lights, 0);
+      glPopMatrix ();
+      
+#if 0
+      glKosMatrixDirty ();
+      
+      glPushMatrix ();
+      glTranslatef (2, 0, 2);
+      glGetFloatv (GL_MODELVIEW_MATRIX, &mview[0][0]);
+      vec_normal_from_modelview (&normxform[0][0], &mview[0][0]);
+      //object_render_immediate (&view, tube, &obj_orient, &lights, 0);
+      glPopMatrix ();
+
+      glKosMatrixDirty ();
+
+      glPushMatrix ();
+      glTranslatef (-2, 0, 2);
+      glGetFloatv (GL_MODELVIEW_MATRIX, &mview[0][0]);
+      vec_normal_from_modelview (&normxform[0][0], &mview[0][0]);
+      //object_render_immediate (&view, tube, &obj_orient, &lights, 0);
+      glPopMatrix ();
+#endif
       
       glKosFinishList ();
 
-      object_render_immediate (tube, 1, mview, normxform, projection, camera,
-			       invcamera, eye_pos, light_pos, light_updir);
-      
+      glPushMatrix ();
+      glTranslatef (pushx, 0, pushy);
+      glGetFloatv (GL_MODELVIEW_MATRIX, &mview[0][0]);
+      vec_normal_from_modelview (&normxform[0][0], &mview[0][0]);
+      object_render_immediate (&view, tube, &obj_orient, &lights, 1);
+      glPopMatrix ();
+
+#if 0
+      glKosMatrixDirty ();
+
+      glPushMatrix ();
+      glTranslatef (2, 0, 2);
+      glGetFloatv (GL_MODELVIEW_MATRIX, &mview[0][0]);
+      vec_normal_from_modelview (&normxform[0][0], &mview[0][0]);
+      //object_render_immediate (&view, tube, &obj_orient, &lights, 1);
+      glPopMatrix ();
+
+      glKosMatrixDirty ();
+
+      glPushMatrix ();
+      glTranslatef (-2, 0, 2);
+      glGetFloatv (GL_MODELVIEW_MATRIX, &mview[0][0]);
+      vec_normal_from_modelview (&normxform[0][0], &mview[0][0]);
+      //object_render_immediate (&view, tube, &obj_orient, &lights, 1);
+      glPopMatrix ();
+#endif
+
       glKosFinishFrame ();
       
       rot1 += 0.05;

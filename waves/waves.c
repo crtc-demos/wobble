@@ -46,6 +46,9 @@ has equidistant neighbours like this:
 
 ***/
 
+#define HSCALE	3.0
+#define VSCALE	0.25
+
 float pos[YSIZE][XSIZE];
 float vel[YSIZE][XSIZE];
 float normals[YSIZE][XSIZE][3];
@@ -97,23 +100,23 @@ update_grid (void)
   {
     for (i=1; i<XSIZE-1; i++)
     {
-      double f, a, k1, k2;
-      double restpos = (pos[j+1][i-1] +
-                        pos[j+1][i] +
-                        pos[j][i+1] +
-                        pos[j-1][i+1] +
-                        pos[j-1][i] +
-                        pos[j][i-1]) / 6.0;
+      float f, a, k1, k2;
+      float restpos = (pos[j+1][i-1] +
+                       pos[j+1][i] +
+                       pos[j][i+1] +
+                       pos[j-1][i+1] +
+                       pos[j-1][i] +
+                       pos[j][i-1]) * (1.0/6.0);
 
       f = (restpos - pos[j][i])*spring - drag*vel[j][i];
-      a = f/mass;
+      a = f * (1.0 / mass);
       k1 = timestep * a;
       
       f = (restpos - pos[j][i])*spring - drag*(vel[j][i]+k1);
-      a = f/mass;
+      a = f * (1.0 / mass);
       k2 = timestep * a;
 
-      vel[j][i] = vel[j][i] + (k1+k2)/2;
+      vel[j][i] = vel[j][i] + (k1+k2) * 0.5;
       pos[j][i] = pos[j][i] + vel[j][i]*timestep;
     }
   }
@@ -134,18 +137,125 @@ update_grid (void)
   for (j = 1; j < YSIZE - 1; j++)
     for (i = 1; i < XSIZE - 1; i++)
       {
-        float ivec[3], jvec[3], norm[3];
+#if 1
+	float p1, p2, p3, p4, p5, p6;
+	float xgrad, ygrad;
+	float centre = pos[j][i];
+	float ivec[3], jvec[3], norm[3];
 	
-	ivec[0] = iscale;
-	ivec[1] = pos[j][i + 1] - pos[j][i];
-	ivec[2] = 0;
+	/***
+	
+	  +         <-+
+	  |           | VSCALE * diff
+	  |       + <-+
+	  |       |
+	  +-------+
+	  
+	  ^-------^
+	HSCALE * iscale
 
+	gradient = (VSCALE * diff) / (HSCALE * iscale)
+		 = diff * (VSCALE / (HSCALE * iscale))
+
+	***/
+	
+	p2 = pos[j + 1][i] - centre;		/* 2 */
+	p3 = pos[j][i + 1] - centre;		/* 3 */
+	p4 = pos[j - 1][i + 1] - centre;	/* 4 */
+	xgrad = fipr (p2, p3, p4, 0.0f,
+		      VSCALE / (HSCALE * ihalf),
+		      VSCALE / (HSCALE * iscale),
+		      VSCALE / (HSCALE * ihalf), 0.0f);
+	
+	p1 = pos[j + 1][i - 1] - centre;	/* 1 */
+	p6 = pos[j][i - 1] - centre;		/* 6 */
+	p5 = pos[j - 1][i] - centre;		/* 5 */
+	xgrad += fipr (p1, p6, p5, 0.0f,
+		       VSCALE / (HSCALE * -ihalf),
+		       VSCALE / (HSCALE * -iscale),
+		       VSCALE / (HSCALE * -ihalf), 0.0f);
+	
+	ygrad = fipr (p1, p2, p4, p5,
+		      VSCALE / (HSCALE * jscale),
+		      VSCALE / (HSCALE * jscale),
+		      VSCALE / (HSCALE * -jscale),
+		      VSCALE / (HSCALE * -jscale));
+	
+	ivec[0] = 1.0f;
+	ivec[1] = xgrad;
+	ivec[2] = 0.0f;
+	
+	jvec[0] = 0.0f;
+	jvec[1] = ygrad;
+	jvec[2] = 1.0f;
+	
+	vec_cross (&norm[0], &jvec[0], &ivec[0]);
+	vec_normalize (&normals[j][i][0], &norm[0]);
+#else
+        float ivec[3], jvec[3], norm[6][3];
+	
+	/* 1 */
+	ivec[0] = -ihalf;
+	ivec[1] = pos[j + 1][i - 1] - pos[j][i];
+	ivec[2] = jscale;
+
+	/* 2 */
 	jvec[0] = ihalf;
 	jvec[1] = pos[j + 1][i] - pos[j][i];
 	jvec[2] = jscale;
 	
-	vec_cross (norm, jvec, ivec);
-	vec_normalize (normals[j][i], norm);
+	vec_cross (norm[0], ivec, jvec);
+	vec_normalize (norm[0], norm[0]);
+	
+	/* 3 */
+	ivec[0] = iscale;
+	ivec[1] = pos[j][i + 1] - pos[j][i];
+	ivec[2] = 0;
+	
+	vec_cross (norm[1], jvec, ivec);
+	vec_normalize (norm[1], norm[1]);
+	
+	/* 4 */
+	jvec[0] = ihalf;
+	jvec[1] = pos[j - 1][i + 1] - pos[j][i];
+	jvec[2] = -jscale;
+	
+	vec_cross (norm[2], ivec, jvec);
+	vec_normalize (norm[2], norm[2]);
+	
+	/* 5 */
+	ivec[0] = -ihalf;
+	ivec[1] = pos[j - 1][i] - pos[j][i];
+	ivec[2] = -jscale;
+	
+	vec_cross (norm[3], jvec, ivec);
+	vec_normalize (norm[3], norm[3]);
+	
+	/* 6 */
+	jvec[0] = -iscale;
+	jvec[1] = pos[j][i - 1] - pos[j][i];
+	jvec[2] = 0;
+	
+	vec_cross (norm[4], ivec, jvec);
+	vec_normalize (norm[4], norm[4]);
+	
+	/* 1 */
+	ivec[0] = -ihalf;
+	ivec[1] = pos[j + 1][i - 1] - pos[j][i];
+	ivec[2] = jscale;
+
+	vec_cross (norm[5], jvec, ivec);
+	vec_normalize (norm[5], norm[5]);
+	
+	normals[j][i][0] = norm[0][0] + norm[1][0] + norm[2][0]
+			 + norm[3][0] + norm[4][0] + norm[5][0];
+	normals[j][i][1] = norm[0][1] + norm[1][1] + norm[2][1]
+			 + norm[3][1] + norm[4][1] + norm[5][1];
+	normals[j][i][2] = norm[0][2] + norm[1][2] + norm[2][2]
+			 + norm[3][2] + norm[4][2] + norm[5][2];
+
+	vec_normalize (&normals[j][i][0], &normals[j][i][0]);
+#endif
       }
 }
 
@@ -220,17 +330,17 @@ draw_water (object *obj, int clockwise)
 	  set_colour (normals[j + 1][i]);
 	  glVertex3f (is + ihalf, pos[j + 1][i], js + jscale);
 #else
-	  (*geom)[idx][0] = is * 3;
-	  (*geom)[idx][1] = pos[j][i] * 0.5;
-	  (*geom)[idx][2] = js * 3;
+	  (*geom)[idx][0] = is * HSCALE;
+	  (*geom)[idx][1] = pos[j][i] * VSCALE;
+	  (*geom)[idx][2] = js * HSCALE;
 	  
 	  (*norm)[idx][0] = normals[j][i][0];
 	  (*norm)[idx][1] = normals[j][i][1];
 	  (*norm)[idx][2] = normals[j][i][2];
 
-	  (*geom)[idx + 1][0] = (is + ihalf) * 3;
-	  (*geom)[idx + 1][1] = pos[j + 1][i] * 0.5;
-	  (*geom)[idx + 1][2] = (js + jscale) * 3;
+	  (*geom)[idx + 1][0] = (is + ihalf) * HSCALE;
+	  (*geom)[idx + 1][1] = pos[j + 1][i] * VSCALE;
+	  (*geom)[idx + 1][2] = (js + jscale) * HSCALE;
 
 	  (*norm)[idx + 1][0] = normals[j + 1][i][0];
 	  (*norm)[idx + 1][1] = normals[j + 1][i][1];
@@ -255,8 +365,8 @@ extern uint8 romdisk[];
 KOS_INIT_FLAGS (INIT_DEFAULT);
 KOS_INIT_ROMDISK (romdisk);
 
-//float light_pos[] = {5, -5, -15};
-float light_pos[] = {6.062, 2, 3.5};
+float light_pos[] = {25, 25, 25};
+//float light_pos[] = {6.062, 2, 3.5};
 float light_updir[] = {0.0, 1.0, 0.0};
 float eye_pos[] = {-0.866, 0.75, -0.5};
 
@@ -265,6 +375,14 @@ static matrix_t invcamera __attribute__((aligned(32)));
 static matrix_t projection __attribute__((aligned(32)));
 static matrix_t mview __attribute__((aligned(32)));
 static matrix_t normxform __attribute__((aligned(32)));
+
+static matrix_t screen_mat __attribute__((aligned(32))) =
+  {
+    { 320.0,  0,     0, 0 },
+    { 0,     -240.0, 0, 0 },
+    { 0,      0,     1, 0 },
+    { 320.0,  240.0, 0, 1 }
+  };
 
 pvr_ptr_t highlight = 0;
 
@@ -295,6 +413,9 @@ main (int argc, char *argv[])
   envmap_dual_para_info envmap;
   kos_img_t front_txr, back_txr;
   pvr_ptr_t texaddr;
+  viewpoint view;
+  object_orientation obj_orient;
+  lighting lights;
 
   cable_type = vid_check_cable ();
 
@@ -307,12 +428,12 @@ main (int argc, char *argv[])
 
 #if 1
   highlight = pvr_mem_malloc (256 * 256);
-  fakephong_highlight_texture (highlight, 256, 256, 10.0f);
+  fakephong_highlight_texture (highlight, 256, 256, 50.0f);
 
   f_phong.highlight = highlight;
   f_phong.xsize = 256;
   f_phong.ysize = 256;
-  f_phong.intensity = 128;
+  f_phong.intensity = 255;
   
   water->fake_phong = &f_phong;
 #else
@@ -360,6 +481,11 @@ main (int argc, char *argv[])
 
   glGetFloatv (GL_PROJECTION_MATRIX, &projection[0][0]);
 
+  mat_load (&screen_mat);
+  mat_apply (&projection);
+  mat_store (&projection);
+  glKosMatrixDirty ();
+
   glMatrixMode (GL_MODELVIEW);
   glLoadIdentity ();
   gluLookAt (eye_pos[0], eye_pos[1], eye_pos[2],	/* Eye position.  */
@@ -369,14 +495,46 @@ main (int argc, char *argv[])
   glGetFloatv (GL_MODELVIEW_MATRIX, &camera[0][0]);
   vec_transpose_rotation (&invcamera[0][0], &camera[0][0]);
 
+  view.projection = &projection;
+  view.camera = &camera;
+  view.inv_camera_orientation = &invcamera;
+  memcpy (&view.eye_pos[0], &eye_pos[0], 3 * sizeof (float));
+  
+  obj_orient.modelview = &mview;
+  obj_orient.normal_xform = &normxform;
+  
+  memcpy (&lights.light0_pos[0], &light_pos[0], 3 * sizeof (float));
+  memcpy (&lights.light0_up[0], &light_updir[0], 3 * sizeof (float));
+
   init_grid ();
 
   while (!quit)
     {
       MAPLE_FOREACH_BEGIN (MAPLE_FUNC_CONTROLLER, cont_state_t, st)
-        if (st->buttons & CONT_START)
-	  quit = 1;
+        {
+          if (st->buttons & CONT_START)
+	    quit = 1;
+
+	  view.eye_pos[0] = st->joyx / 25.0;
+	  view.eye_pos[2] = st->joyy / 25.0;
+	}
       MAPLE_FOREACH_END ()
+
+      glMatrixMode (GL_MODELVIEW);
+      glLoadIdentity ();
+		 /* Eye position.  */
+      gluLookAt (view.eye_pos[0], view.eye_pos[1], view.eye_pos[2],
+		 /* Centre.  */
+		 0.866, 0.5,   0.5,
+		 /* Up.  */
+		 0.0,   1.0,   0.0);
+
+      glGetFloatv (GL_MODELVIEW_MATRIX, &camera[0][0]);
+      vec_transpose_rotation (&invcamera[0][0], &camera[0][0]);
+      vec_transform (&lights.light0_pos_xform[0], &camera[0][0],
+		     &lights.light0_pos[0]);
+      vec_transform (&lights.light0_up_xform[0], &camera[0][0],
+		     &lights.light0_up[0]);
 
       glKosBeginFrame ();
 
@@ -385,13 +543,11 @@ main (int argc, char *argv[])
 
       glGetFloatv (GL_MODELVIEW_MATRIX, &mview[0][0]);
       vec_normal_from_modelview (&normxform[0][0], &mview[0][0]);
-      object_render_immediate (water, 0, mview, normxform, projection, camera,
-			       invcamera, eye_pos, light_pos, light_updir);
+      object_render_immediate (&view, water, &obj_orient, &lights, 0);
       
       glKosFinishList ();
 
-      object_render_immediate (water, 1, mview, normxform, projection, camera,
-			       invcamera, eye_pos, light_pos, light_updir);
+      object_render_immediate (&view, water, &obj_orient, &lights, 1);
 
       glKosFinishFrame ();
     }

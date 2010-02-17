@@ -28,7 +28,7 @@ run:	$(TARGET)
 
 $(TARGET):	$(OBJS)
 	$(KOS_CC) $(KOS_CFLAGS) $(KOS_LDFLAGS) -o $(TARGET) $(KOS_START) $(OBJS) -lgl -lpng -lkmg -lz -lm -lkosutils $(KOS_LIBS)
-	$(STRIP) $(TARGET)
+	#$(STRIP) $(TARGET)
 
 .PHONY: $(ROMDISK)
 $(ROMDISK): imagedir_clean
