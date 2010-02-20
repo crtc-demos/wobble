@@ -166,6 +166,7 @@ main (int argc, char *argv[])
 
   object_set_ambient (tube, 64, 0, 0);
   object_set_pigment (tube, 255, 0, 0);
+  object_set_clipping (tube, 1);
   
   glKosInit ();
   
@@ -204,13 +205,18 @@ main (int argc, char *argv[])
   view.camera = &camera;
   view.inv_camera_orientation = &invcamera;
   memcpy (&view.eye_pos[0], &eye_pos[0], 3 * sizeof (float));
+  view.near = -0.2f;
   
   obj_orient.modelview = &mview;
   obj_orient.normal_xform = &normxform;
   
   memcpy (&lights.light0_pos[0], &light_pos[0], 3 * sizeof (float));
   memcpy (&lights.light0_up[0], &light_updir[0], 3 * sizeof (float));
-  
+  vec_transform3_fipr (&lights.light0_pos_xform[0], &camera[0][0],
+		       &lights.light0_pos[0]);
+  vec_transform3_fipr (&lights.light0_up_xform[0], &camera[0][0],
+		       &lights.light0_up[0]);
+
   /* glGenTextures (1, &texture[0]); */
 
   palette_grey_ramp ();
@@ -250,7 +256,7 @@ main (int argc, char *argv[])
       glTranslatef (2, 0, 2);
       glGetFloatv (GL_MODELVIEW_MATRIX, &mview[0][0]);
       vec_normal_from_modelview (&normxform[0][0], &mview[0][0]);
-      //object_render_immediate (&view, tube, &obj_orient, &lights, 0);
+      object_render_immediate (&view, tube, &obj_orient, &lights, 0);
       glPopMatrix ();
 
       glKosMatrixDirty ();
@@ -259,7 +265,7 @@ main (int argc, char *argv[])
       glTranslatef (-2, 0, 2);
       glGetFloatv (GL_MODELVIEW_MATRIX, &mview[0][0]);
       vec_normal_from_modelview (&normxform[0][0], &mview[0][0]);
-      //object_render_immediate (&view, tube, &obj_orient, &lights, 0);
+      object_render_immediate (&view, tube, &obj_orient, &lights, 0);
       glPopMatrix ();
 #endif
       
@@ -279,7 +285,7 @@ main (int argc, char *argv[])
       glTranslatef (2, 0, 2);
       glGetFloatv (GL_MODELVIEW_MATRIX, &mview[0][0]);
       vec_normal_from_modelview (&normxform[0][0], &mview[0][0]);
-      //object_render_immediate (&view, tube, &obj_orient, &lights, 1);
+      object_render_immediate (&view, tube, &obj_orient, &lights, 1);
       glPopMatrix ();
 
       glKosMatrixDirty ();
@@ -288,7 +294,7 @@ main (int argc, char *argv[])
       glTranslatef (-2, 0, 2);
       glGetFloatv (GL_MODELVIEW_MATRIX, &mview[0][0]);
       vec_normal_from_modelview (&normxform[0][0], &mview[0][0]);
-      //object_render_immediate (&view, tube, &obj_orient, &lights, 1);
+      object_render_immediate (&view, tube, &obj_orient, &lights, 1);
       glPopMatrix ();
 #endif
 

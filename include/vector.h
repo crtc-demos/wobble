@@ -145,10 +145,40 @@ vec_sub (FLOAT_TYPE *dst, const FLOAT_TYPE *a, const FLOAT_TYPE *b)
 }
 
 static __inline__ void
-vec_transform (FLOAT_TYPE *dst, const FLOAT_TYPE *mat, const FLOAT_TYPE *src)
+vec_interpolate (FLOAT_TYPE *dst, const FLOAT_TYPE *a, const FLOAT_TYPE *b,
+		 FLOAT_TYPE param)
+{
+  FLOAT_TYPE tmp[3];
+  vec_sub (&tmp[0], b, a);
+  vec_scale (&tmp[0], &tmp[0], param);
+  vec_add (dst, a, &tmp[0]);
+}
+
+static __inline__ void
+vec_interpolate2 (FLOAT_TYPE *dst, const FLOAT_TYPE *a, const FLOAT_TYPE *b,
+		  FLOAT_TYPE param)
+{
+  dst[0] = a[0] + param * (b[0] - a[0]);
+  dst[1] = a[1] + param * (b[1] - a[1]);
+}
+
+/* Use this for one-off transformations, when it's not worth loading xmtrx.  */
+static __inline__ void
+vec_transform_fipr (FLOAT_TYPE *dst, const FLOAT_TYPE *mat,
+		    const FLOAT_TYPE *src)
 {
   assert (dst != src);
 
+#ifdef DC_FAST_MATHS
+  dst[0] = fipr (mat[0], mat[4], mat[8], mat[12],
+		 src[0], src[1], src[2], src[3]);
+  dst[1] = fipr (mat[1], mat[5], mat[9], mat[13],
+		 src[0], src[1], src[2], src[3]);
+  dst[2] = fipr (mat[2], mat[6], mat[10], mat[14],
+		 src[0], src[1], src[2], src[3]);
+  dst[3] = fipr (mat[3], mat[7], mat[11], mat[15],
+		 src[0], src[1], src[2], src[3]);
+#else
   dst[0] = mat[0] * src[0]
            + mat[4] * src[1]
 	   + mat[8] * src[2] 
@@ -165,6 +195,20 @@ vec_transform (FLOAT_TYPE *dst, const FLOAT_TYPE *mat, const FLOAT_TYPE *src)
 	   + mat[7] * src[1]
 	   + mat[11] * src[2]
            + mat[15] * src[3];
+#endif
+}
+
+/* Same, but 3-element src & dest vectors.  */
+static __inline__ void
+vec_transform3_fipr (FLOAT_TYPE *dst, const FLOAT_TYPE *mat,
+		     const FLOAT_TYPE *src)
+{
+  dst[0] = fipr (mat[0], mat[4], mat[8], mat[12],
+		 src[0], src[1], src[2], 0.0f);
+  dst[1] = fipr (mat[1], mat[5], mat[9], mat[13],
+		 src[0], src[1], src[2], 0.0f);
+  dst[2] = fipr (mat[2], mat[6], mat[10], mat[14],
+		 src[0], src[1], src[2], 0.0f);
 }
 
 static __inline__ void
@@ -173,6 +217,16 @@ vec_transform_post (FLOAT_TYPE *dst, const FLOAT_TYPE *src,
 {
   assert (dst != src);
 
+#ifdef DC_FAST_MATHS
+  dst[0] = fipr (mat[0], mat[1], mat[2], mat[3],
+		 src[0], src[1], src[2], src[3]);
+  dst[1] = fipr (mat[4], mat[5], mat[6], mat[7],
+		 src[0], src[1], src[2], src[3]);
+  dst[2] = fipr (mat[8], mat[9], mat[10], mat[11],
+		 src[0], src[1], src[2], src[3]);
+  dst[3] = fipr (mat[12], mat[13], mat[14], mat[15],
+		 src[0], src[1], src[2], src[3]);
+#else
   dst[0] = mat[0] * src[0]
            + mat[1] * src[1]
 	   + mat[2] * src[2] 
@@ -189,15 +243,16 @@ vec_transform_post (FLOAT_TYPE *dst, const FLOAT_TYPE *src,
 	   + mat[13] * src[1]
 	   + mat[14] * src[2]
            + mat[15] * src[3];
+#endif
 }
 
 static __inline__ void
 vec_mat_apply (FLOAT_TYPE *dst, const FLOAT_TYPE *a, const FLOAT_TYPE *b)
 {
-  vec_transform (&dst[0], a, &b[0]);
-  vec_transform (&dst[4], a, &b[4]);
-  vec_transform (&dst[8], a, &b[8]);
-  vec_transform (&dst[12], a, &b[12]);
+  vec_transform_fipr (&dst[0], a, &b[0]);
+  vec_transform_fipr (&dst[4], a, &b[4]);
+  vec_transform_fipr (&dst[8], a, &b[8]);
+  vec_transform_fipr (&dst[12], a, &b[12]);
 }
 
 /* Transpose the rotation part of (an orthogonal) matrix only.  */

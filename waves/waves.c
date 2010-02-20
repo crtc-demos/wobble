@@ -426,7 +426,7 @@ main (int argc, char *argv[])
 
   init_pvr ();
 
-#if 1
+#if 0
   highlight = pvr_mem_malloc (256 * 256);
   fakephong_highlight_texture (highlight, 256, 256, 50.0f);
 
@@ -457,6 +457,7 @@ main (int argc, char *argv[])
   
   object_set_ambient (water, 0, 0, 64);
   object_set_pigment (water, 0, 0, 255);
+  object_set_clipping (water, 1);
   
   palette_grey_ramp ();
 
@@ -499,6 +500,7 @@ main (int argc, char *argv[])
   view.camera = &camera;
   view.inv_camera_orientation = &invcamera;
   memcpy (&view.eye_pos[0], &eye_pos[0], 3 * sizeof (float));
+  view.near = -0.2f;
   
   obj_orient.modelview = &mview;
   obj_orient.normal_xform = &normxform;
@@ -531,10 +533,10 @@ main (int argc, char *argv[])
 
       glGetFloatv (GL_MODELVIEW_MATRIX, &camera[0][0]);
       vec_transpose_rotation (&invcamera[0][0], &camera[0][0]);
-      vec_transform (&lights.light0_pos_xform[0], &camera[0][0],
-		     &lights.light0_pos[0]);
-      vec_transform (&lights.light0_up_xform[0], &camera[0][0],
-		     &lights.light0_up[0]);
+      vec_transform3_fipr (&lights.light0_pos_xform[0], &camera[0][0],
+			   &lights.light0_pos[0]);
+      vec_transform3_fipr (&lights.light0_up_xform[0], &camera[0][0],
+			   &lights.light0_up[0]);
 
       glKosBeginFrame ();
 

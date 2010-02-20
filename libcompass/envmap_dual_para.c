@@ -12,7 +12,7 @@ envmap_dual_para_texcoords (float *texc_f, float *texc_b,
 			    float x_vertex[3], float x_normal[3],
 			    float c_eyepos[3], matrix_t invcamera)
 {
-  float eye_to_vertex[3], tmp[3], reflection[4], unrot[4], eye_norm_dot;
+  float eye_to_vertex[3], tmp[3], reflection[3], unrot[3], eye_norm_dot;
   float x, y, z, x_f, y_f, z_f, x_b, y_b, z_b;
   
   vec_sub (eye_to_vertex, &c_eyepos[0], &x_vertex[0]);
@@ -22,8 +22,7 @@ envmap_dual_para_texcoords (float *texc_f, float *texc_b,
   vec_scale (tmp, x_normal, 2.0 * eye_norm_dot);
   
   vec_sub (reflection, tmp, eye_to_vertex);
-  reflection[3] = 1.0;
-  vec_transform (unrot, (float *) &invcamera[0][0], reflection);
+  vec_transform3_fipr (unrot, (float *) &invcamera[0][0], reflection);
   x = unrot[0];
   y = unrot[1];
   z = unrot[2];

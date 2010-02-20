@@ -31,6 +31,7 @@ typedef struct
 #define ALLOC_GEOMETRY		(1 << 0)
 #define ALLOC_NORMALS		(1 << 1)
 #define ALLOC_TEXCOORDS		(1 << 2)
+#define ALLOC_VERTEXATTRS	(1 << 3)
 
 typedef struct strip
 {
@@ -61,6 +62,12 @@ typedef struct object
   colour ambient;
   colour pigment;
   
+  /* Whether to clip this object.  */
+  int clip;
+  
+  /* Cached max. length of strip.  */
+  int max_strip_length;
+  
   /* Render object with specular highlight if non-NULL.  */
   fakephong_info *fake_phong;
   
@@ -80,6 +87,7 @@ typedef struct viewpoint
   matrix_t *camera;
   matrix_t *inv_camera_orientation;
   float eye_pos[3];
+  float near;
 } viewpoint;
 
 typedef struct object_orientation
@@ -99,9 +107,10 @@ typedef struct lighting
 extern object *object_create_default (strip *strips);
 extern void object_set_ambient (object *obj, int r, int g, int b);
 extern void object_set_pigment (object *obj, int r, int g, int b);
+extern void object_set_clipping (object *obj, int clip);
 extern void object_set_all_textures (object *obj, pvr_ptr_t txr,
 				     unsigned int xsize, unsigned int ysize);
-extern void object_render_immediate (viewpoint *view, const object *,
+extern void object_render_immediate (viewpoint *view, object *,
 				     object_orientation *, lighting *, int);
 extern strip *strip_cons (strip *prev, unsigned int length,
 			  unsigned int alloc_bits);
