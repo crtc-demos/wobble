@@ -49,6 +49,7 @@ object_create_default (strip *strips)
   newobj->pigment.b = 192;
   newobj->clip = 0;
   newobj->max_strip_length = -1;
+  newobj->plain_textured = 0;
   newobj->fake_phong = NULL;
   newobj->env_map = NULL;
   newobj->bump_map = NULL;
@@ -375,10 +376,19 @@ pool_clear (void)
 void *
 pool_alloc (unsigned int amt)
 {
+retry:
   if (current_pool->used + amt > current_pool->capacity)
     {
-      mem_pool *newpart = malloc (sizeof (mem_pool));
+      mem_pool *newpart;
       unsigned int newsize = (amt > POOL_PART_SIZE) ? amt : POOL_PART_SIZE;
+      
+      if (current_pool->next != NULL)
+        {
+	  current_pool = current_pool->next;
+          goto retry;
+	}
+      
+      newpart = malloc (sizeof (mem_pool));
       
       fprintf (stderr, "Pool allocator: allocating new part (size %u)\n",
 	       newsize);
@@ -426,6 +436,13 @@ triangle_clipping_classifier (float tri[3][3], int clockwise,
 }
 
 float amt = 0.0;
+
+#if 1
+#define PREFETCH(X)
+#else
+#define PREFETCH(X) __asm__ __volatile__ ("pref @%0" : : "r" (X))
+#endif
+
 
 /* NORMAL_XFORM is the transpose-inverse of the rotation part of the MODELVIEW
    matrix.  */
@@ -478,6 +495,7 @@ object_render_immediate (viewpoint *view, object *obj,
         {
 	  float *vec = &(*str->start)[i][0], *outvec = &(*trans)[i][0];
 	  float x = vec[0], y = vec[1], z = vec[2], w = 1.0;
+	  PREFETCH (&vec[3]);
 	  mat_trans_nodiv (x, y, z, w);
 	  outvec[0] = x;
 	  outvec[1] = y;
@@ -490,6 +508,7 @@ object_render_immediate (viewpoint *view, object *obj,
         {
 	  float *norm = &(*str->normals)[i][0], *outnorm = &(*trans_norm)[i][0];
 	  float x = norm[0], y = norm[1], z = norm[2], w = 1.0;
+	  PREFETCH (&norm[3]);
 	  mat_trans_nodiv (x, y, z, w);
 	  outnorm[0] = x;
 	  outnorm[1] = y;
@@ -574,10 +593,10 @@ object_render_immediate (viewpoint *view, object *obj,
 			  memcpy (&normals[outidx][0],
 				  &(*cstr->normals)[i + j][0],
 				  3 * sizeof (float));
-			  if (*cstr->texcoords)
+			  if (cstr->texcoords)
 			    memcpy (&texcs[outidx][0],
 				    &(*cstr->texcoords)[i + j][0],
-				    3 * sizeof (float));
+				    2 * sizeof (float));
 			  outidx++;
 			}
 		      
@@ -597,7 +616,7 @@ object_render_immediate (viewpoint *view, object *obj,
 					   &(*cstr->normals)[i + j][0],
 					   &(*cstr->normals)[i + next][0],
 					   param);
-			  if (*cstr->texcoords)
+			  if (cstr->texcoords)
 			    vec_interpolate2 (&texcs[outidx][0],
 					      &(*cstr->texcoords)[i + j][0],
 					      &(*cstr->texcoords)[i + next][0],
@@ -605,6 +624,8 @@ object_render_immediate (viewpoint *view, object *obj,
 			  outidx++;
 			}
 		    }
+		  
+		  assert (outidx == output_length);
 		  
 		  switch (outidx)
 		    {
@@ -615,7 +636,7 @@ object_render_immediate (viewpoint *view, object *obj,
 			      points, 3 * 3 * sizeof (float));
 		      memcpy (&(*clipped_output->normals)[0][0],
 			      normals, 3 * 3 * sizeof (float));
-		      if (*clipped_output->texcoords)
+		      if (clipped_output->texcoords)
 		        memcpy (&(*clipped_output->texcoords)[0][0],
 				texcs, 3 * 2 * sizeof (float));
 		      break;
@@ -633,7 +654,7 @@ object_render_immediate (viewpoint *view, object *obj,
 				    &points[order[j]][0], 3 * sizeof (float));
 			    memcpy (&(*clipped_output->normals)[j][0],
 				    &normals[order[j]][0], 3 * sizeof (float));
-			    if (*clipped_output->texcoords)
+			    if (clipped_output->texcoords)
 			      memcpy (&(*clipped_output->texcoords)[j][0],
 				      &texcs[order[j]][0], 2 * sizeof (float));
 			  }
@@ -789,8 +810,8 @@ object_render_immediate (viewpoint *view, object *obj,
 
       /* First pass for bump mapping, fake phong -- for now, plain
          gouraud-shaded polygons only.  */
-      if (pass == 0 && (obj->bump_map || obj->fake_phong) && !obj->env_map
-	  && !obj->cel_shading)
+      if (pass == 0 && /*(obj->bump_map || obj->fake_phong) &&*/ !obj->env_map
+	  && !obj->cel_shading && !obj->plain_textured)
         {
 	  /* First pass, dot-product lighting.  */
 	  pvr_poly_cxt_t cxt;
@@ -818,10 +839,14 @@ object_render_immediate (viewpoint *view, object *obj,
 		float x, y, z;
 		int last = (i == use_strip->length - 1);
 
+		//PREFETCH (&(*use_strip->start)[i + 2][0]);
+
 		x = invec[0];
 		y = invec[1];
 		z = invec[2];
 		mat_trans_single (x, y, z);
+
+		//PREFETCH (&(*use_strip->normals)[i + 2][0]);
 
 		vert.flags = (last) ? PVR_CMD_VERTEX_EOL : PVR_CMD_VERTEX;
 		vert.argb = lightsource_diffuse (&(*use_strip->start)[i][0],
@@ -838,7 +863,56 @@ object_render_immediate (viewpoint *view, object *obj,
 	      }
 	}
 
-      mat_load (view->projection);
+      if (pass == 0 && obj->plain_textured)
+        {
+	  pvr_poly_cxt_t cxt;
+	  pvr_poly_hdr_t hdr;
+	  pvr_vertex_t vert;
+	  	  
+	  vert.oargb = 0;
+	  vert.argb = PVR_PACK_COLOR (1.0f, 1.0f, 1.0f, 1.0f);
+
+	  mat_load (view->projection);
+
+	  for (; use_strip; use_strip = use_strip->next)
+	    {
+	      pvr_poly_cxt_txr (&cxt, PVR_LIST_OP_POLY,
+		PVR_TXRFMT_RGB565 | PVR_TXRFMT_TWIDDLED,
+		use_strip->s_attrs->xsize, use_strip->s_attrs->ysize,
+		use_strip->s_attrs->texture, PVR_FILTER_BILINEAR);
+	  	  
+	      pvr_poly_compile (&hdr, &cxt);
+
+	      pvr_prim (&hdr, sizeof (hdr));
+
+	      for (i = 0; i < use_strip->length; i++)
+		{
+		  float *invec = &(*use_strip->start)[i][0];
+		  float *texc = &(*use_strip->texcoords)[i][0];
+		  float x, y, z;
+		  int last = (i == use_strip->length - 1);
+
+		  //PREFETCH (&(*use_strip->start)[i + 2][0]);
+
+		  x = invec[0];
+		  y = invec[1];
+		  z = invec[2];
+		  mat_trans_single (x, y, z);
+
+		  //PREFETCH (&(*use_strip->normals)[i + 2][0]);
+
+		  vert.flags = (last) ? PVR_CMD_VERTEX_EOL : PVR_CMD_VERTEX;
+		  vert.x = x;
+		  vert.y = y;
+		  vert.z = z;
+		  vert.u = texc[0];
+		  vert.v = texc[1];
+		  pvr_prim (&vert, sizeof (vert));
+		  if (i == 0 && use_strip->inverse)
+		    pvr_prim (&vert, sizeof (vert));
+		}
+	    }
+	}
 
       /* First pass for cel shading (experimental).  */
       if (pass == 1 && obj->cel_shading)
@@ -869,7 +943,9 @@ object_render_immediate (viewpoint *view, object *obj,
 	  vert.argb = PVR_PACK_COLOR (1.0f, 1.0f, 1.0f, 1.0f);
 	  
 	  //pvr_fog_far_depth (1);
-	  
+
+	  mat_load (view->projection);
+
 	  for (i = 0; i < str->length; i++)
 	    {
 	      int last = (i == str->length - 1);
@@ -969,10 +1045,14 @@ object_render_immediate (viewpoint *view, object *obj,
 		  float x, y, z;
 		  int last = (i == str_out->length - 1);
 
+		  //PREFETCH (&(*str_out->start)[i + 2][0]);
+
 		  x = invec[0];
 		  y = invec[1];
 		  z = invec[2];
 		  mat_trans_single (x, y, z);
+
+		  //PREFETCH (&str_out->v_attrs[i + 1].fakephong.texc[0]);
 
 		  vert.flags = (last) ? PVR_CMD_VERTEX_EOL : PVR_CMD_VERTEX;
 		  vert.x = x;
@@ -1100,6 +1180,7 @@ strip_cons (strip *prev, unsigned int length, unsigned int alloc_bits)
   float (*geom)[][3] = NULL;
   float (*norms)[][3] = NULL;
   float (*texcoords)[][2] = NULL;
+  vertex_attrs *v_attrs = NULL;
   
   if (alloc_bits & ALLOC_GEOMETRY)
     geom = malloc (3 * sizeof (float) * length);
@@ -1107,13 +1188,15 @@ strip_cons (strip *prev, unsigned int length, unsigned int alloc_bits)
     norms = malloc (3 * sizeof (float) * length);
   if (alloc_bits & ALLOC_TEXCOORDS)
     texcoords = malloc (2 * sizeof (float) * length);
+  if (alloc_bits & ALLOC_VERTEXATTRS)
+    v_attrs = malloc (sizeof (vertex_attrs) * length);
 
   newstrip->start = geom;
   newstrip->normals = norms;
   newstrip->texcoords = texcoords;
   newstrip->length = length;
   newstrip->inverse = 0;
-  newstrip->v_attrs = NULL;
+  newstrip->v_attrs = v_attrs;
   newstrip->s_attrs = NULL;
   newstrip->next = prev;
   

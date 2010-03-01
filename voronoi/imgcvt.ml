@@ -643,7 +643,7 @@ let _ =
   flush stdout;
   let cloud = ref (seed_world img population_size) in
   let no_improvement = ref 0 in
-  while !no_improvement < 5 do
+  while !no_improvement < 10 do
     let old_best_score = !best_score in
     Printf.printf "Breeding... (no improvement for %d)\n" !no_improvement;
     flush stdout;

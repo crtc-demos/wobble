@@ -505,7 +505,10 @@ main (int argc, char *argv[])
 
 #elif 1
   /* It's not really very accurately named at the moment.  */
+#if 0
   sphobj = /*geosphere_create (2);*/ torus_create (1.0, 0.4, 16, 32);
+#endif
+  sphobj = load_object ("/rd/out.stp");
   sphobj->cel_shading = &celinfo;
   sphobj->fake_phong = &f_phong;
   

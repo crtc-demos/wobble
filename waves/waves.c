@@ -436,7 +436,7 @@ main (int argc, char *argv[])
   f_phong.intensity = 255;
   
   water->fake_phong = &f_phong;
-#else
+#elif 1
   kmg_to_img ("/rd/sky1.kmg", &front_txr);
   texaddr = pvr_mem_malloc (front_txr.byte_count);
   pvr_txr_load_kimg (&front_txr, texaddr, PVR_TXRFMT_VQ_ENABLE);

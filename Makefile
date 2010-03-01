@@ -19,12 +19,14 @@
 	COMPASS_SRC =	libcompass/fakephong.c libcompass/envmap_dual_para.c \
 			libcompass/bump_map.c libcompass/object.c \
 			libcompass/palette.c libcompass/restrip.c \
-			libcompass/perlin.c libcompass/perlin-3d.c
+			libcompass/perlin.c libcompass/perlin-3d.c \
+			libcompass/loader.c
 
 	COMPASS_OBJ =	libcompass/fakephong.o libcompass/envmap_dual_para.o \
 			libcompass/bump_map.o libcompass/object.o \
 			libcompass/palette.o libcompass/restrip.o \
-			libcompass/perlin.o libcompass/perlin-3d.o
+			libcompass/perlin.o libcompass/perlin-3d.o \
+			libcompass/loader.o
 
 	LIBCOMPASS =	libcompass/libcompass.a
 

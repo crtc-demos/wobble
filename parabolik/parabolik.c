@@ -393,7 +393,7 @@ box (float *vertex, int colour)
   //vec_mat_apply (&tmp[0], &projection[0][0], &modelview[0][0]);
   
   //vec_transform (x_vertex, (float *) &modelview[0][0], vertex);
-  vec_transform (xx_vertex, (float *) &projection[0][0], vertex);
+  vec_transform_fipr (xx_vertex, (float *) &projection[0][0], vertex);
   
   xx_vertex[0] = 320 + 320 * (xx_vertex[0] / xx_vertex[3]) - 1;
   xx_vertex[1] = 240 - 240 * (xx_vertex[1] / xx_vertex[3]) - 1;
@@ -424,7 +424,7 @@ parabolic_texcoords (float *texc, float vertex[3], float normal[3], int front)
 
   /* Find the normal in eye space.  */
   normalized_normal[3] = 1.0;
-  vec_transform (x_normal, (float *) &rotate[0][0], normalized_normal);
+  vec_transform_fipr (x_normal, (float *) &rotate[0][0], normalized_normal);
 
  /* incidence = vec_dot (&light[0], &x_normal[0]);
   
@@ -441,9 +441,9 @@ parabolic_texcoords (float *texc, float vertex[3], float normal[3], int front)
   /* We need the vertex in eye space.  This duplicates work!  */
   memcpy (vertex4, vertex, sizeof (float) * 3);
   vertex4[3] = 1.0;
-  vec_transform (x_vertex, (float *) &transform[0][0], vertex4);
+  vec_transform_fipr (x_vertex, (float *) &transform[0][0], vertex4);
 
-  vec_transform (&c_eyepos[0], &camera[0][0], &eye_pos[0]);
+  vec_transform_fipr (&c_eyepos[0], &camera[0][0], &eye_pos[0]);
   vec_sub (eye_to_vertex, &c_eyepos[0], &x_vertex[0]);
   vec_normalize (eye_to_vertex, eye_to_vertex);
   
@@ -498,7 +498,7 @@ parabolic_texcoords (float *texc, float vertex[3], float normal[3], int front)
   mat_trans_nodiv (x, y, z, w);
   glKosMatrixDirty ();*/
   reflection[3] = 1.0;
-  vec_transform (unrot, (float *) &invcamera[0][0], reflection);
+  vec_transform_fipr (unrot, (float *) &invcamera[0][0], reflection);
   x = unrot[0];
   y = unrot[1];
   z = unrot[2];

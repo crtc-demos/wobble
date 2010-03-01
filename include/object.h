@@ -68,6 +68,9 @@ typedef struct object
   /* Cached max. length of strip.  */
   int max_strip_length;
   
+  /* Plain textured, no lighting or fancy stuff.  */
+  int plain_textured;
+  
   /* Render object with specular highlight if non-NULL.  */
   fakephong_info *fake_phong;
   
