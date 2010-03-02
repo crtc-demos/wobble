@@ -20,13 +20,17 @@
 			libcompass/bump_map.c libcompass/object.c \
 			libcompass/palette.c libcompass/restrip.c \
 			libcompass/perlin.c libcompass/perlin-3d.c \
-			libcompass/loader.c
+			libcompass/loader.c libcompass/geosphere.c \
+			libcompass/skybox.c libcompass/torus.c \
+			libcompass/tube.c
 
 	COMPASS_OBJ =	libcompass/fakephong.o libcompass/envmap_dual_para.o \
 			libcompass/bump_map.o libcompass/object.o \
 			libcompass/palette.o libcompass/restrip.o \
 			libcompass/perlin.o libcompass/perlin-3d.o \
-			libcompass/loader.o
+			libcompass/loader.o libcompass/geosphere.o \
+			libcompass/skybox.o libcompass/torus.o \
+			libcompass/tube.o
 
 	LIBCOMPASS =	libcompass/libcompass.a
 

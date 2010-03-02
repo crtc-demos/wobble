@@ -21,7 +21,6 @@
 #include "palette.h"
 #include "object.h"
 #include "loader.h"
-#include "tube.h"
 
 extern uint8 romdisk[];
 
@@ -52,9 +51,9 @@ static void
 init_pvr (void)
 {
   pvr_init_params_t params = {
-    { PVR_BINSIZE_16,	/* Opaque polygons.  */
+    { PVR_BINSIZE_32,	/* Opaque polygons.  */
       PVR_BINSIZE_0,	/* Opaque modifiers.  */
-      PVR_BINSIZE_16,	/* Translucent polygons.  */
+      PVR_BINSIZE_32,	/* Translucent polygons.  */
       PVR_BINSIZE_0,	/* Translucent modifiers.  */
       PVR_BINSIZE_0 },	/* Punch-thrus.  */
     512 * 1024,		/* Vertex buffer size 512K.  */
@@ -65,25 +64,36 @@ init_pvr (void)
   pvr_init (&params);
 }
 
+uint64_t start_time;
 
-#define ROWS 16
-#define SEGMENTS 32
+typedef struct {
+  uint64_t start_time;
+  uint64_t end_time;
+  void (*do_thing) (uint64_t time_offset, void *params);
+  void *params;
+} do_thing_at;
 
-float rot1 = 0;
-float eye_ang = 0;
+static torus_params torus1 = {
+  .colour = 0x000000ff;
+};
+
+static torus_params torus2 = {
+  .colour = 0x0000ffff;
+};
+
+static do_thing_at sequence[] = {
+  {    0, 1000, &draw_torus, &torus1 },
+  { 1000, 2000, &draw_torus, &torus2 }
+};
 
 int
 main (int argc, char *argv[])
 {
   int cable_type;
   int quit = 0;
-  object *tube = allocate_tube (ROWS, SEGMENTS);
-  object *skybox;
-  fakephong_info f_phong;
   viewpoint view;
   object_orientation obj_orient;
   lighting lights;
-  pvr_ptr_t skytex[6];
 
   cable_type = vid_check_cable ();
   if (cable_type == CT_VGA)
@@ -93,37 +103,10 @@ main (int argc, char *argv[])
 
   init_pvr ();
 
-  highlight = pvr_mem_malloc (256 * 256);
-  fakephong_highlight_texture (highlight, 256, 256, 10.0f);
-
-  //tube = load_object ("/rd/out.stp");
-
-  f_phong.highlight = highlight;
-  f_phong.xsize = 256;
-  f_phong.ysize = 256;
-  f_phong.intensity = 128;
-
-  tube->fake_phong = &f_phong;
-
   object_set_ambient (tube, 64, 0, 0);
   object_set_pigment (tube, 255, 0, 0);
   object_set_clipping (tube, 1);
-  
-  skytex[0] = pvr_mem_malloc (512 * 512 * 2);
-  png_to_texture ("/rd/sky23.png", skytex[0], PNG_NO_ALPHA);
-  skytex[1] = pvr_mem_malloc (512 * 512 * 2);
-  png_to_texture ("/rd/sky24.png", skytex[1], PNG_NO_ALPHA);
-  skytex[2] = pvr_mem_malloc (512 * 512 * 2);
-  png_to_texture ("/rd/sky27.png", skytex[2], PNG_NO_ALPHA);
-  skytex[3] = pvr_mem_malloc (512 * 512 * 2);
-  png_to_texture ("/rd/sky28.png", skytex[3], PNG_NO_ALPHA);
-  skytex[4] = pvr_mem_malloc (512 * 512 * 2);
-  png_to_texture ("/rd/sky25.png", skytex[4], PNG_NO_ALPHA);
-  skytex[5] = pvr_mem_malloc (512 * 512 * 2);
-  png_to_texture ("/rd/sky26.png", skytex[5], PNG_NO_ALPHA);
-  
-  skybox = create_skybox (30, skytex, 512, 512);
-  
+    
   glKosInit ();
   
   glViewport (0, 0, 640, 480);
@@ -171,30 +154,26 @@ main (int argc, char *argv[])
   
   pvr_set_bg_color (0.0, 0.0, 0.0);
   
+  start_time = timer_ms_gettime64 ();
+  
   while (!quit)
     {
-      float pushx = 0.0, pushy = 0.0;
+      uint64_t current_time;
 
       MAPLE_FOREACH_BEGIN (MAPLE_FUNC_CONTROLLER, cont_state_t, st)
         if (st->buttons & CONT_START)
 	  quit = 1;
-	pushx = st->joyx / 25.0;
-	pushy = (st->joyy / 25.0) + 2.0;
       MAPLE_FOREACH_END ()
 
-      fill_tube_data (tube, ROWS, SEGMENTS, rot1);
-
-      eye_pos[0] = 4.5 * sinf (eye_ang);
-      eye_pos[2] = 4.5 * cosf (eye_ang);
-      eye_pos[1] = 2.0 - pushy;
+      current_time = timer_ms_gettime64 () - start_time;
       
-      eye_ang -= pushx / 30.0f;
+      
 
       glMatrixMode (GL_MODELVIEW);
       glLoadIdentity ();
       gluLookAt (eye_pos[0], eye_pos[1], eye_pos[2],	/* Eye position.  */
-		 0.0,  0.0,  0.0,				/* Centre.  */
-		 0.0,  1.0,  0.0);				/* Up.  */
+		 0.0,  0.0,  0.0,			/* Centre.  */
+		 0.0,  1.0,  0.0);			/* Up.  */
 
       glGetFloatv (GL_MODELVIEW_MATRIX, &camera[0][0]);
       vec_transpose_rotation (&invcamera[0][0], &camera[0][0]);
@@ -207,73 +186,10 @@ main (int argc, char *argv[])
       glKosBeginFrame ();
 
       glKosMatrixDirty ();
-
-      glGetFloatv (GL_MODELVIEW_MATRIX, &mview[0][0]);
-      object_render_immediate (&view, skybox, &obj_orient, &lights, 0);
-
-      glKosMatrixDirty ();
-
-      glPushMatrix ();
-      glTranslatef (0, 0, 4);
-      glGetFloatv (GL_MODELVIEW_MATRIX, &mview[0][0]);
-      vec_normal_from_modelview (&normxform[0][0], &mview[0][0]);
-      object_render_immediate (&view, tube, &obj_orient, &lights, 0);
-      glPopMatrix ();
-      
-#if 0
-      glKosMatrixDirty ();
-      
-      glPushMatrix ();
-      glTranslatef (2, 0, 6);
-      glGetFloatv (GL_MODELVIEW_MATRIX, &mview[0][0]);
-      vec_normal_from_modelview (&normxform[0][0], &mview[0][0]);
-      object_render_immediate (&view, tube, &obj_orient, &lights, 0);
-      glPopMatrix ();
-
-      glKosMatrixDirty ();
-
-      glPushMatrix ();
-      glTranslatef (-2, 0, 6);
-      glGetFloatv (GL_MODELVIEW_MATRIX, &mview[0][0]);
-      vec_normal_from_modelview (&normxform[0][0], &mview[0][0]);
-      object_render_immediate (&view, tube, &obj_orient, &lights, 0);
-      glPopMatrix ();
-#endif
-
-      glKosMatrixDirty ();
       
       glKosFinishList ();
 
-      glPushMatrix ();
-      glTranslatef (0, 0, 4);
-      glGetFloatv (GL_MODELVIEW_MATRIX, &mview[0][0]);
-      vec_normal_from_modelview (&normxform[0][0], &mview[0][0]);
-      object_render_immediate (&view, tube, &obj_orient, &lights, 1);
-      glPopMatrix ();
-
-#if 0
-      glKosMatrixDirty ();
-
-      glPushMatrix ();
-      glTranslatef (2, 0, 6);
-      glGetFloatv (GL_MODELVIEW_MATRIX, &mview[0][0]);
-      vec_normal_from_modelview (&normxform[0][0], &mview[0][0]);
-      object_render_immediate (&view, tube, &obj_orient, &lights, 1);
-      glPopMatrix ();
-
-      glKosMatrixDirty ();
-
-      glPushMatrix ();
-      glTranslatef (-2, 0, 6);
-      glGetFloatv (GL_MODELVIEW_MATRIX, &mview[0][0]);
-      vec_normal_from_modelview (&normxform[0][0], &mview[0][0]);
-      object_render_immediate (&view, tube, &obj_orient, &lights, 1);
-      glPopMatrix ();
-#endif
-
       glKosFinishFrame ();
-      
-      rot1 += 0.05;
     }
 
   glKosShutdown ();
