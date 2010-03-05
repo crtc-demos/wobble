@@ -1,10 +1,16 @@
-#ifndef TORUS_H
-#define TORUS_H 1
+#ifndef DRAW_TORUS_H
+#define DRAW_TORUS_H 1
+
+#include <stdint.h>
+
+#include "timing.h"
 
 typedef struct {
-  uint32_t colour;
+  object_orientation obj_orient;
+  uint8_t ambient_r, ambient_g, ambient_b;
+  uint8_t diffuse_r, diffuse_g, diffuse_b;
 } torus_params;
 
-extern void draw_torus (uint64_t time_offset, void *params);
+extern effect_methods torus_methods;
 
 #endif

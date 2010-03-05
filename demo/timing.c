@@ -3,6 +3,7 @@
 #include <math.h>
 #include <stdlib.h>
 #include <alloca.h>
+#include <stdint.h>
 
 #include <kos.h>
 
@@ -22,6 +23,9 @@
 #include "object.h"
 #include "loader.h"
 
+#include "draw_torus.h"
+#include "voronoi.h"
+
 extern uint8 romdisk[];
 
 KOS_INIT_FLAGS (INIT_DEFAULT);
@@ -34,8 +38,6 @@ float eye_pos[] = {0.0, 0.0, -4.5};
 static matrix_t camera __attribute__((aligned(32)));
 static matrix_t invcamera __attribute__((aligned(32)));
 static matrix_t projection __attribute__((aligned(32)));
-static matrix_t mview __attribute__((aligned(32)));
-static matrix_t normxform __attribute__((aligned(32)));
 
 static matrix_t screen_mat __attribute__((aligned(32))) =
   {
@@ -66,25 +68,30 @@ init_pvr (void)
 
 uint64_t start_time;
 
-typedef struct {
-  uint64_t start_time;
-  uint64_t end_time;
-  void (*do_thing) (uint64_t time_offset, void *params);
-  void *params;
-} do_thing_at;
-
 static torus_params torus1 = {
-  .colour = 0x000000ff;
+  .ambient_r = 64, .ambient_g = 0, .ambient_b = 0,
+  .diffuse_r = 255, .diffuse_g = 0, .diffuse_b = 0
 };
 
 static torus_params torus2 = {
-  .colour = 0x0000ffff;
+  .ambient_r = 64, .ambient_g = 64, .ambient_b = 0,
+  .diffuse_r = 255, .diffuse_g = 255, .diffuse_b = 0
 };
 
 static do_thing_at sequence[] = {
-  {    0, 1000, &draw_torus, &torus1 },
-  { 1000, 2000, &draw_torus, &torus2 }
+  {     0,  2000, &voronoi_methods, NULL, 0 },
+  {  2000,  4000, &voronoi_methods, NULL, 1 },
+  {  4000,  6000, &voronoi_methods, NULL, 2 },
+  {  6000,  8000, &voronoi_methods, NULL, 3 },
+  { 10000, 12500, &torus_methods, &torus1, 0 },
+  { 11000, 13500, &torus_methods, &torus2, 0 },
+  { 12000, 14500, &torus_methods, &torus1, 1 },
+  { 15000, 16000, &torus_methods, &torus2, 0 }
 };
+
+#define ARRAY_SIZE(X) (sizeof (X) / sizeof (X[0]))
+
+#define MAX_ACTIVE 20
 
 int
 main (int argc, char *argv[])
@@ -92,8 +99,13 @@ main (int argc, char *argv[])
   int cable_type;
   int quit = 0;
   viewpoint view;
-  object_orientation obj_orient;
   lighting lights;
+  uint64_t start_time;
+  int i;
+  unsigned int next_effect;
+  do_thing_at *active_effects[MAX_ACTIVE];
+  unsigned int num_active_effects;
+  const int num_effects = ARRAY_SIZE (sequence);
 
   cable_type = vid_check_cable ();
   if (cable_type == CT_VGA)
@@ -103,10 +115,6 @@ main (int argc, char *argv[])
 
   init_pvr ();
 
-  object_set_ambient (tube, 64, 0, 0);
-  object_set_pigment (tube, 255, 0, 0);
-  object_set_clipping (tube, 1);
-    
   glKosInit ();
   
   glViewport (0, 0, 640, 480);
@@ -135,10 +143,7 @@ main (int argc, char *argv[])
   view.camera = &camera;
   view.inv_camera_orientation = &invcamera;
   view.near = -0.2f;
-  
-  obj_orient.modelview = &mview;
-  obj_orient.normal_xform = &normxform;
-  
+    
   memcpy (&lights.light0_pos[0], &light_pos[0], 3 * sizeof (float));
   memcpy (&lights.light0_up[0], &light_updir[0], 3 * sizeof (float));
   vec_transform3_fipr (&lights.light0_pos_xform[0], &camera[0][0],
@@ -154,11 +159,21 @@ main (int argc, char *argv[])
   
   pvr_set_bg_color (0.0, 0.0, 0.0);
   
+  for (i = 0; i < ARRAY_SIZE (sequence); i++)
+    {
+      if (sequence[i].methods->preinit_assets)
+        sequence[i].methods->preinit_assets ();
+    }
+  
+  num_active_effects = 0;
+  next_effect = 0;
+  
   start_time = timer_ms_gettime64 ();
   
   while (!quit)
     {
       uint64_t current_time;
+      int i, j;
 
       MAPLE_FOREACH_BEGIN (MAPLE_FUNC_CONTROLLER, cont_state_t, st)
         if (st->buttons & CONT_START)
@@ -167,8 +182,6 @@ main (int argc, char *argv[])
 
       current_time = timer_ms_gettime64 () - start_time;
       
-      
-
       glMatrixMode (GL_MODELVIEW);
       glLoadIdentity ();
       gluLookAt (eye_pos[0], eye_pos[1], eye_pos[2],	/* Eye position.  */
@@ -185,8 +198,81 @@ main (int argc, char *argv[])
 
       glKosBeginFrame ();
 
+      /* Terminate old effects.  */
+      for (i = 0; i < num_active_effects; i++)
+        {
+	  if (current_time >= active_effects[i]->end_time)
+	    {
+	      /*printf ("uninit effect %d (iparam=%d)\n", i,
+		      active_effects[i]->iparam);*/
+
+	      if (active_effects[i]->methods->uninit_effect)
+	        {
+	          active_effects[i]->methods->uninit_effect (
+		    active_effects[i]->params);
+		}
+	      active_effects[i] = NULL;
+	    }
+	}
+
+      /* And remove from active list.  */
+      for (i = 0, j = 0; j < num_active_effects;)
+        {
+	  active_effects[i] = active_effects[j];
+
+	  if (active_effects[i] == NULL)
+	    j++;
+	  else
+	    {
+	      i++;
+	      j++;
+	    }
+	}
+
+      num_active_effects = i;
+
+      while (next_effect < num_effects
+	     && current_time >= sequence[next_effect].start_time)
+	{
+	  active_effects[num_active_effects] = &sequence[next_effect];
+
+	  /*printf ("init effect %d (%p, iparam=%d)\n", next_effect,
+		  sequence[next_effect].methods->init_effect,
+		  sequence[next_effect].iparam);*/
+
+	  if (sequence[next_effect].methods->init_effect)
+	    {
+	      sequence[next_effect].methods->init_effect (
+		sequence[next_effect].params);
+	    }
+
+	  num_active_effects++;
+	  next_effect++;
+	}
+
+      if (next_effect == num_effects && num_active_effects == 0)
+        quit = 1;
+
+      for (i = 0; i < num_active_effects; i++)
+        {
+	  if (active_effects[i]->methods->display_effect)
+	    active_effects[i]->methods->display_effect (
+	      current_time - active_effects[i]->start_time,
+	      active_effects[i]->params, active_effects[i]->iparam, &view,
+	      &lights, 0);
+	}
+
       glKosMatrixDirty ();
-      
+
+      for (i = 0; i < num_active_effects; i++)
+        {
+	  if (active_effects[i]->methods->display_effect)
+	    active_effects[i]->methods->display_effect (
+	      current_time - active_effects[i]->start_time,
+	      active_effects[i]->params, active_effects[i]->iparam, &view,
+	      &lights, 1);
+	}
+
       glKosFinishList ();
 
       glKosFinishFrame ();

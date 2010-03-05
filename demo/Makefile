@@ -6,12 +6,12 @@
 	DEPFLAGS =	-DDREAMCAST_KOS -D_arch_dreamcast
 	GENROMFS =	$(KOS_GENROMFS)
 
-	OBJS =		timing.o romdisk.o
+	OBJS =		draw_torus.o voronoi.o timing.o romdisk.o
 	ROMDISK =	romdisk.img
 
-	TARGET =	timing.elf
+	TARGET =	demo.elf
 
-	SRC =		timing.c
+	SRC =		draw_torus.c voronoi.c timing.c
 
 .PHONY:	.depend
 
