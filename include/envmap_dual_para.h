@@ -6,7 +6,9 @@
 typedef struct
 {
   pvr_ptr_t front_txr;
+  unsigned int front_txr_fmt;
   pvr_ptr_t back_txr;
+  unsigned int back_txr_fmt;
   unsigned int xsize;
   unsigned int ysize;
 } envmap_dual_para_info;

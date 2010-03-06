@@ -53,7 +53,7 @@ object_create_default (strip *strips)
   newobj->fake_phong = NULL;
   newobj->env_map = NULL;
   newobj->bump_map = NULL;
-  newobj->cel_shading = NULL;
+  newobj->vertex_fog = NULL;
   
   return newobj;
 }
@@ -707,10 +707,9 @@ object_render_immediate (viewpoint *view, object *obj,
 	    {
 	      /* Render front strips.  */
 	      pvr_poly_cxt_txr (&cxt, PVR_LIST_OP_POLY,
-				PVR_TXRFMT_RGB565 | PVR_TXRFMT_TWIDDLED
-				| PVR_TXRFMT_VQ_ENABLE, obj->env_map->xsize,
-				obj->env_map->ysize, obj->env_map->front_txr,
-				PVR_FILTER_BILINEAR);
+				obj->env_map->front_txr_fmt,
+				obj->env_map->xsize, obj->env_map->ysize,
+				obj->env_map->front_txr, PVR_FILTER_BILINEAR);
 
 	      pvr_poly_compile (&hdr, &cxt);
 	      
@@ -750,10 +749,9 @@ object_render_immediate (viewpoint *view, object *obj,
 		  }
 
 	      pvr_poly_cxt_txr (&cxt, PVR_LIST_OP_POLY,
-	      			PVR_TXRFMT_ARGB4444 | PVR_TXRFMT_TWIDDLED
-				| PVR_TXRFMT_VQ_ENABLE, obj->env_map->xsize,
-				obj->env_map->ysize, obj->env_map->back_txr,
-				PVR_FILTER_BILINEAR);
+				obj->env_map->back_txr_fmt,
+				obj->env_map->xsize, obj->env_map->ysize,
+				obj->env_map->back_txr, PVR_FILTER_BILINEAR);
 			
 	      /* Render back-only strips.  */
 	      class = 1;
@@ -761,8 +759,7 @@ object_render_immediate (viewpoint *view, object *obj,
 	  else
 	    {
 	      pvr_poly_cxt_txr (&cxt, ALPHA_LIST,
-	      			PVR_TXRFMT_ARGB4444 | PVR_TXRFMT_TWIDDLED
-				| PVR_TXRFMT_VQ_ENABLE, obj->env_map->xsize,
+	      			obj->env_map->back_txr_fmt, obj->env_map->xsize,
 				obj->env_map->ysize, obj->env_map->back_txr,
 				PVR_FILTER_BILINEAR);
 	      cxt.txr.uv_clamp = PVR_UVCLAMP_UV;
@@ -811,7 +808,7 @@ object_render_immediate (viewpoint *view, object *obj,
       /* First pass for bump mapping, fake phong -- for now, plain
          gouraud-shaded polygons only.  */
       if (pass == 0 && /*(obj->bump_map || obj->fake_phong) &&*/ !obj->env_map
-	  && !obj->cel_shading && !obj->plain_textured)
+	  && !obj->vertex_fog && !obj->plain_textured)
         {
 	  /* First pass, dot-product lighting.  */
 	  pvr_poly_cxt_t cxt;
@@ -914,8 +911,8 @@ object_render_immediate (viewpoint *view, object *obj,
 	    }
 	}
 
-      /* First pass for cel shading (experimental).  */
-      if (pass == 1 && obj->cel_shading)
+      /* First pass for vertex fog (experimental).  */
+      if (pass == 1 && obj->vertex_fog)
         {
 	  pvr_poly_cxt_t cxt;
 	  pvr_poly_hdr_t hdr;
@@ -923,8 +920,8 @@ object_render_immediate (viewpoint *view, object *obj,
 	  
 	  pvr_poly_cxt_txr (&cxt, PVR_LIST_TR_POLY,
 			    PVR_TXRFMT_RGB565 | PVR_TXRFMT_TWIDDLED,
-			    obj->cel_shading->w, obj->cel_shading->h,
-			    obj->cel_shading->texture, PVR_FILTER_BILINEAR);
+			    obj->vertex_fog->w, obj->vertex_fog->h,
+			    obj->vertex_fog->texture, PVR_FILTER_BILINEAR);
 	  
 	  cxt.gen.fog_type = PVR_FOG_VERTEX;
 

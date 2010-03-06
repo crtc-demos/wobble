@@ -25,6 +25,8 @@
 
 #include "draw_torus.h"
 #include "voronoi.h"
+#include "wobble_tube.h"
+#include "waves.h"
 
 extern uint8 romdisk[];
 
@@ -79,14 +81,16 @@ static torus_params torus2 = {
 };
 
 static do_thing_at sequence[] = {
-  {     0,  2000, &voronoi_methods, NULL, 0 },
-  {  2000,  4000, &voronoi_methods, NULL, 1 },
-  {  4000,  6000, &voronoi_methods, NULL, 2 },
-  {  6000,  8000, &voronoi_methods, NULL, 3 },
-  { 10000, 12500, &torus_methods, &torus1, 0 },
-  { 11000, 13500, &torus_methods, &torus2, 0 },
-  { 12000, 14500, &torus_methods, &torus1, 1 },
-  { 15000, 16000, &torus_methods, &torus2, 0 }
+ /* {     0,  4000, &voronoi_methods, NULL, 0 },
+  {  4000,  8000, &voronoi_methods, NULL, 1 },
+  {  8000, 12000, &voronoi_methods, NULL, 2 },
+  { 12000, 16000, &voronoi_methods, NULL, 3 },
+  { 20000, 22500, &torus_methods, &torus1, 0 },
+  { 21000, 23500, &torus_methods, &torus2, 0 },
+  { 22000, 24500, &torus_methods, &torus1, 1 },
+  { 25000, 26000, &torus_methods, &torus2, 0 } */
+  /*{     0, 30000, &wobble_tube_methods, NULL, 0 }*/
+  { 0, 300000, &wave_methods, NULL, 0 }
 };
 
 #define ARRAY_SIZE(X) (sizeof (X) / sizeof (X[0]))
@@ -167,7 +171,21 @@ main (int argc, char *argv[])
   
   num_active_effects = 0;
   next_effect = 0;
-  
+
+  glMatrixMode (GL_MODELVIEW);
+  glLoadIdentity ();
+  gluLookAt (eye_pos[0], eye_pos[1], eye_pos[2],	/* Eye position.  */
+	     0.0,  0.0,  0.0,				/* Centre.  */
+	     0.0,  1.0,  0.0);				/* Up.  */
+
+  glGetFloatv (GL_MODELVIEW_MATRIX, &camera[0][0]);
+  vec_transpose_rotation (&invcamera[0][0], &camera[0][0]);
+  memcpy (&view.eye_pos[0], &eye_pos[0], 3 * sizeof (float));
+  vec_transform3_fipr (&lights.light0_pos_xform[0], &camera[0][0],
+		       &lights.light0_pos[0]);
+  vec_transform3_fipr (&lights.light0_up_xform[0], &camera[0][0],
+		       &lights.light0_up[0]);
+
   start_time = timer_ms_gettime64 ();
   
   while (!quit)
@@ -182,20 +200,6 @@ main (int argc, char *argv[])
 
       current_time = timer_ms_gettime64 () - start_time;
       
-      glMatrixMode (GL_MODELVIEW);
-      glLoadIdentity ();
-      gluLookAt (eye_pos[0], eye_pos[1], eye_pos[2],	/* Eye position.  */
-		 0.0,  0.0,  0.0,			/* Centre.  */
-		 0.0,  1.0,  0.0);			/* Up.  */
-
-      glGetFloatv (GL_MODELVIEW_MATRIX, &camera[0][0]);
-      vec_transpose_rotation (&invcamera[0][0], &camera[0][0]);
-      memcpy (&view.eye_pos[0], &eye_pos[0], 3 * sizeof (float));
-      vec_transform3_fipr (&lights.light0_pos_xform[0], &camera[0][0],
-			   &lights.light0_pos[0]);
-      vec_transform3_fipr (&lights.light0_up_xform[0], &camera[0][0],
-			   &lights.light0_up[0]);
-
       glKosBeginFrame ();
 
       /* Terminate old effects.  */
@@ -262,6 +266,7 @@ main (int argc, char *argv[])
 	      &lights, 0);
 	}
 
+      glKosFinishList ();
       glKosMatrixDirty ();
 
       for (i = 0; i < num_active_effects; i++)
@@ -272,8 +277,6 @@ main (int argc, char *argv[])
 	      active_effects[i]->params, active_effects[i]->iparam, &view,
 	      &lights, 1);
 	}
-
-      glKosFinishList ();
 
       glKosFinishFrame ();
     }

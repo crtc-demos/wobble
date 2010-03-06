@@ -7,7 +7,7 @@
 #include "fakephong.h"
 #include "envmap_dual_para.h"
 #include "bumpmap.h"
-#include "cel_shading.h"
+#include "vertex_fog.h"
 
 typedef float vector[3];
 
@@ -80,8 +80,8 @@ typedef struct object
   /* Render using bump map if non-NULL.  */
   bumpmap_info *bump_map;
   
-  /* Render using cel shading if non-NULL.  */
-  celshading_info *cel_shading;
+  /* Render with vertex fog if non-NULL.  */
+  vertexfog_info *vertex_fog;
 } object;
 
 typedef struct viewpoint

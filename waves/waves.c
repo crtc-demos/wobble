@@ -441,12 +441,16 @@ main (int argc, char *argv[])
   texaddr = pvr_mem_malloc (front_txr.byte_count);
   pvr_txr_load_kimg (&front_txr, texaddr, PVR_TXRFMT_VQ_ENABLE);
   envmap.front_txr = texaddr;
+  envmap.front_txr_fmt = PVR_TXRFMT_RGB565 | PVR_TXRFMT_TWIDDLED
+			 | PVR_TXRFMT_VQ_ENABLE;
   kos_img_free (&front_txr, 0);
   
   kmg_to_img ("/rd/sky2o.kmg", &back_txr);
   texaddr = pvr_mem_malloc (back_txr.byte_count);
   pvr_txr_load_kimg (&back_txr, texaddr, PVR_TXRFMT_VQ_ENABLE);
   envmap.back_txr = texaddr;
+  envmap.back_txr_fmt = PVR_TXRFMT_ARGB4444 | PVR_TXRFMT_TWIDDLED
+			| PVR_TXRFMT_VQ_ENABLE;
   kos_img_free (&back_txr, 0);
   
   envmap.xsize = front_txr.w;
