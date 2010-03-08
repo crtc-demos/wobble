@@ -19,6 +19,8 @@
 #include "restrip.h"
 #include "fakephong.h"
 #include "palette.h"
+#include "vertex_fog.h"
+#include "loader.h"
 
 #define PARAMETERISATION 1
 
@@ -36,6 +38,14 @@ static matrix_t invcamera __attribute__((aligned(32)));
 static matrix_t projection __attribute__((aligned(32)));
 static matrix_t mview __attribute__((aligned(32)));
 static matrix_t normxform __attribute__((aligned(32)));
+
+static matrix_t screen_mat __attribute__((aligned(32))) =
+  {
+    { 320.0,  0,     0, 0 },
+    { 0,     -240.0, 0, 0 },
+    { 0,      0,     1, 0 },
+    { 320.0,  240.0, 0, 1 }
+  };
 
 pvr_ptr_t highlight = 0;
 
@@ -462,7 +472,10 @@ main (int argc, char *argv[])
   kos_img_t front_txr, back_txr;
   pvr_ptr_t texaddr;
   bumpmap_info binfo;
-  celshading_info celinfo;
+  vertexfog_info celinfo;
+  viewpoint view;
+  object_orientation obj_orient;
+  lighting lights;
   
   cable_type = vid_check_cable ();
   if (cable_type == CT_VGA)
@@ -503,13 +516,13 @@ main (int argc, char *argv[])
   /* Set up the bomb!  */
   //sphobj->env_map = &envmap;
 
-#elif 1
+#elif 0
   /* It's not really very accurately named at the moment.  */
 #if 0
   sphobj = /*geosphere_create (2);*/ torus_create (1.0, 0.4, 16, 32);
 #endif
   sphobj = load_object ("/rd/out.stp");
-  sphobj->cel_shading = &celinfo;
+  sphobj->vertex_fog = &celinfo;
   sphobj->fake_phong = &f_phong;
   
   {
@@ -569,6 +582,11 @@ main (int argc, char *argv[])
 
   glGetFloatv (GL_PROJECTION_MATRIX, &projection[0][0]);
 
+  mat_load (&screen_mat);
+  mat_apply (&projection);
+  mat_store (&projection);
+  glKosMatrixDirty ();
+
   glMatrixMode (GL_MODELVIEW);
   glLoadIdentity ();
   gluLookAt (0.0,  0.0, -4.5,		/* Eye position.  */
@@ -594,6 +612,18 @@ main (int argc, char *argv[])
   //pvr_fog_table_exp (0.35);
   //pvr_fog_table_linear (0, 5);
   pvr_set_bg_color (0.5, 0.5, 0.5);
+  
+  view.projection = &projection;
+  view.camera = &camera;
+  view.inv_camera_orientation = &invcamera;
+  memcpy (view.eye_pos, eye_pos, sizeof (float) * 3);
+  view.near = 0.1;
+  
+  obj_orient.modelview = &mview;
+  obj_orient.normal_xform = &normxform;
+  
+  memcpy (lights.light0_up, light_updir, sizeof (float) * 3);
+  memcpy (lights.light0_pos, light_pos, sizeof (float) * 3);
   
   while (!quit)
     {
@@ -678,8 +708,10 @@ main (int argc, char *argv[])
       /*render_geosphere (spherestrips, 0);*/
       glGetFloatv (GL_MODELVIEW_MATRIX, &mview[0][0]);
       vec_normal_from_modelview (&normxform[0][0], &mview[0][0]);
-      object_render_immediate (sphobj, 0, mview, normxform, projection, camera,
-			       invcamera, eye_pos, light_pos, light_updir);
+      object_render_immediate (&view, sphobj, &obj_orient, &lights, 0);
+      
+      /*, mview, normxform, projection, camera,
+			       invcamera, eye_pos, light_pos, light_updir);*/
       glPopMatrix ();
 
 #if 0
@@ -726,8 +758,7 @@ main (int argc, char *argv[])
       //render_geosphere (spherestrips, 1);
       glGetFloatv (GL_MODELVIEW_MATRIX, &mview[0][0]);
       vec_normal_from_modelview (&normxform[0][0], &mview[0][0]);
-      object_render_immediate (sphobj, 1, mview, normxform, projection, camera,
-			       invcamera, eye_pos, light_pos, light_updir);
+      object_render_immediate (&view, sphobj, &obj_orient, &lights, 1);
       glPopMatrix ();
 
 #if 0

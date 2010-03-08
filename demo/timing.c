@@ -27,6 +27,9 @@
 #include "voronoi.h"
 #include "wobble_tube.h"
 #include "waves.h"
+#include "fire.h"
+#include "bumpy_cubes.h"
+#include "foggy_tubes.h"
 
 extern uint8 romdisk[];
 
@@ -90,7 +93,11 @@ static do_thing_at sequence[] = {
   { 22000, 24500, &torus_methods, &torus1, 1 },
   { 25000, 26000, &torus_methods, &torus2, 0 } */
   /*{     0, 30000, &wobble_tube_methods, NULL, 0 }*/
-  { 0, 300000, &wave_methods, NULL, 0 }
+  /*{ 0, 300000, &wave_methods, NULL, 0 }*/
+  /*{     0,  10000, &wobble_tube_methods, NULL, 0 },*/
+  /*{ 0, 300000, &fire_methods, NULL, 0 },
+  { 0, 300000, &bumpy_cube_methods, NULL, 0 }*/
+  { 0, 300000, &foggy_tube_methods, NULL, 0 }
 };
 
 #define ARRAY_SIZE(X) (sizeof (X) / sizeof (X[0]))
@@ -148,13 +155,6 @@ main (int argc, char *argv[])
   view.inv_camera_orientation = &invcamera;
   view.near = -0.2f;
     
-  memcpy (&lights.light0_pos[0], &light_pos[0], 3 * sizeof (float));
-  memcpy (&lights.light0_up[0], &light_updir[0], 3 * sizeof (float));
-  vec_transform3_fipr (&lights.light0_pos_xform[0], &camera[0][0],
-		       &lights.light0_pos[0]);
-  vec_transform3_fipr (&lights.light0_up_xform[0], &camera[0][0],
-		       &lights.light0_up[0]);
-
   /* glGenTextures (1, &texture[0]); */
 
   palette_grey_ramp ();
@@ -181,6 +181,8 @@ main (int argc, char *argv[])
   glGetFloatv (GL_MODELVIEW_MATRIX, &camera[0][0]);
   vec_transpose_rotation (&invcamera[0][0], &camera[0][0]);
   memcpy (&view.eye_pos[0], &eye_pos[0], 3 * sizeof (float));
+  memcpy (&lights.light0_pos[0], &light_pos[0], 3 * sizeof (float));
+  memcpy (&lights.light0_up[0], &light_updir[0], 3 * sizeof (float));
   vec_transform3_fipr (&lights.light0_pos_xform[0], &camera[0][0],
 		       &lights.light0_pos[0]);
   vec_transform3_fipr (&lights.light0_up_xform[0], &camera[0][0],
@@ -199,8 +201,6 @@ main (int argc, char *argv[])
       MAPLE_FOREACH_END ()
 
       current_time = timer_ms_gettime64 () - start_time;
-      
-      glKosBeginFrame ();
 
       /* Terminate old effects.  */
       for (i = 0; i < num_active_effects; i++)
@@ -256,6 +256,19 @@ main (int argc, char *argv[])
 
       if (next_effect == num_effects && num_active_effects == 0)
         quit = 1;
+
+      /* Do things we need to do before starting to send stuff to the PVR.  */
+      
+      for (i = 0; i < num_active_effects; i++)
+        {
+	  if (active_effects[i]->methods->prepare_frame)
+	    active_effects[i]->methods->prepare_frame (
+	      current_time - active_effects[i]->start_time,
+	      active_effects[i]->params, active_effects[i]->iparam, &view,
+	      &lights);
+	}
+
+      glKosBeginFrame ();
 
       for (i = 0; i < num_active_effects; i++)
         {

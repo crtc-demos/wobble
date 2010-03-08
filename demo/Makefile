@@ -1,18 +1,19 @@
 
 	CC =		kos-cc
-	CFLAGS =	-O0 -g
+	CFLAGS =	-O3
 	INCLUDE =	-I../include
 	STRIP =		kos-strip
 	DEPFLAGS =	-DDREAMCAST_KOS -D_arch_dreamcast
 	GENROMFS =	$(KOS_GENROMFS)
 
-	OBJS =		draw_torus.o voronoi.o wobble_tube.o waves.o timing.o \
-			romdisk.o
+	OBJS =		draw_torus.o voronoi.o wobble_tube.o waves.o fire.o \
+			bumpy_cubes.o foggy_tubes.o timing.o romdisk.o
 	ROMDISK =	romdisk.img
 
 	TARGET =	demo.elf
 
-	SRC =		draw_torus.c voronoi.c wobble_tube.c waves.c timing.c
+	SRC =		draw_torus.c voronoi.c wobble_tube.c waves.c fire.c \
+			bumpy_cubes.c foggy_tubes.c timing.c
 
 .PHONY:	.depend
 

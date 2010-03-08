@@ -435,8 +435,6 @@ triangle_clipping_classifier (float tri[3][3], int clockwise,
     return 1;
 }
 
-float amt = 0.0;
-
 #if 1
 #define PREFETCH(X)
 #else
@@ -495,7 +493,7 @@ object_render_immediate (viewpoint *view, object *obj,
         {
 	  float *vec = &(*str->start)[i][0], *outvec = &(*trans)[i][0];
 	  float x = vec[0], y = vec[1], z = vec[2], w = 1.0;
-	  PREFETCH (&vec[3]);
+	  PREFETCH (&vec[5]);
 	  mat_trans_nodiv (x, y, z, w);
 	  outvec[0] = x;
 	  outvec[1] = y;
@@ -508,7 +506,7 @@ object_render_immediate (viewpoint *view, object *obj,
         {
 	  float *norm = &(*str->normals)[i][0], *outnorm = &(*trans_norm)[i][0];
 	  float x = norm[0], y = norm[1], z = norm[2], w = 1.0;
-	  PREFETCH (&norm[3]);
+	  PREFETCH (&norm[5]);
 	  mat_trans_nodiv (x, y, z, w);
 	  outnorm[0] = x;
 	  outnorm[1] = y;
@@ -825,7 +823,7 @@ object_render_immediate (viewpoint *view, object *obj,
 	  pvr_prim (&hdr, sizeof (hdr));
 	  
 	  vert.oargb = 0;
-	  vert.argb = PVR_PACK_COLOR (1.0f, 1.0f, 1.0f, 1.0f);
+	  vert.argb = PVR_PACK_COLOR (1.0f, 1.0f, 0.7f, 0.0f);
 
 	  mat_load (view->projection);
 
@@ -846,9 +844,10 @@ object_render_immediate (viewpoint *view, object *obj,
 		//PREFETCH (&(*use_strip->normals)[i + 2][0]);
 
 		vert.flags = (last) ? PVR_CMD_VERTEX_EOL : PVR_CMD_VERTEX;
-		vert.argb = lightsource_diffuse (&(*use_strip->start)[i][0],
-		  &(*use_strip->normals)[i][0], &obj->ambient, &obj->pigment,
-		  &lights->light0_pos_xform[0]);
+		if (!obj->bump_map)
+		  vert.argb = lightsource_diffuse (&(*use_strip->start)[i][0],
+		    &(*use_strip->normals)[i][0], &obj->ambient, &obj->pigment,
+		    &lights->light0_pos_xform[0]);
 		vert.x = x;
 		vert.y = y;
 		vert.z = z;
@@ -917,6 +916,7 @@ object_render_immediate (viewpoint *view, object *obj,
 	  pvr_poly_cxt_t cxt;
 	  pvr_poly_hdr_t hdr;
 	  pvr_vertex_type3_t vert;
+	  strip *iter;
 	  
 	  pvr_poly_cxt_txr (&cxt, PVR_LIST_TR_POLY,
 			    PVR_TXRFMT_RGB565 | PVR_TXRFMT_TWIDDLED,
@@ -943,43 +943,37 @@ object_render_immediate (viewpoint *view, object *obj,
 
 	  mat_load (view->projection);
 
-	  for (i = 0; i < str->length; i++)
-	    {
-	      int last = (i == str->length - 1);
-	      float fogginess;
-	      float *invec = &(*str->start)[i][0];
-	      float x, y, z;
+	  for (iter = use_strip; iter; iter = iter->next)
+	    for (i = 0; i < iter->length; i++)
+	      {
+		int last = (i == iter->length - 1);
+		float fogginess;
+		float *invec = &(*iter->start)[i][0];
+		float x, y, z;
 
-	      x = invec[0];
-	      y = invec[1];
-	      z = invec[2];
-	      mat_trans_single (x, y, z);
+		x = invec[0];
+		y = invec[1];
+		z = invec[2];
+		mat_trans_single (x, y, z);
 
-	      vert.flags = (last) ? PVR_CMD_VERTEX_EOL : PVR_CMD_VERTEX;
-	      vert.argb = lightsource_diffuse (&(*str->start)[i][0],
-					       &(*str->normals)[i][0],
-					       &obj->ambient, &obj->pigment,
-					       &lights->light0_pos_xform[0]);
-	      fogginess
-	        = perlin_noise_2D (x / 640.0 + amt,
-				   y / 480.0 + amt / 2
-				   + z / 2.0, 2) / 3.0;
-	      if (fogginess < 0.0)
-	        fogginess = 0.0;
-	      if (fogginess > 1.0)
-	        fogginess = 1.0;
-	      fogginess += (1.0 - fogginess) * (z / 5.0);
-	      	      
-	      vert.oargb = PVR_PACK_COLOR (fogginess, 0.0, 0.0, 0.0);
-	      vert.x = x;
-	      vert.y = y;
-	      vert.z = z;
-	      vert.u = 0;
-	      vert.v = 0;
-	      pvr_prim (&vert, sizeof (vert));
-	      if (i == 0 && str->inverse)
+		vert.flags = (last) ? PVR_CMD_VERTEX_EOL : PVR_CMD_VERTEX;
+		vert.argb = lightsource_diffuse (&invec[0],
+						 &(*iter->normals)[i][0],
+						 &obj->ambient, &obj->pigment,
+						 &lights->light0_pos_xform[0]);
+		fogginess = obj->vertex_fog->fogging (x, y, z,
+						      &iter->v_attrs[i]);
+
+		vert.oargb = PVR_PACK_COLOR (fogginess, 0.0, 0.0, 0.0);
+		vert.x = x;
+		vert.y = y;
+		vert.z = z;
+		vert.u = 0;
+		vert.v = 0;
 		pvr_prim (&vert, sizeof (vert));
-	    }
+		if (i == 0 && iter->inverse)
+		  pvr_prim (&vert, sizeof (vert));
+	      }
 	}
 
       /* Emit polygons for fake phong highlight.  */
@@ -1074,6 +1068,10 @@ object_render_immediate (viewpoint *view, object *obj,
 	  pvr_poly_cxt_t cxt;
 	  pvr_poly_hdr_t hdr;
 	  pvr_vertex_t vert;
+	  float strip_mid[3] = {0, 0, 0}, strip_avgnorm[3] = {0, 0, 0};
+	  float light_incident[3], s_dot_n, t, f[3], d[3];
+	  float d_cross_r[3], dxr_len, d_len, q;
+	  int over_pi, over_2pi;
 
 	  pvr_poly_cxt_txr (&cxt, ALPHA_LIST,
 			    PVR_TXRFMT_BUMP | PVR_TXRFMT_TWIDDLED,
@@ -1097,56 +1095,63 @@ object_render_immediate (viewpoint *view, object *obj,
 	  vec_transform3_fipr (x_orient, (float *) obj_orient->normal_xform,
 			       use_strip->s_attrs->uv_orient);
 	  
+	  for (i = 0; i < use_strip->length; i++)
+	    {
+	      vec_add (&strip_mid[0], &strip_mid[0],
+		       &(*use_strip->start)[i][0]);
+	      vec_add (&strip_avgnorm[0], &strip_avgnorm[0],
+		       &(*use_strip->normals)[i][0]);
+	    }
+
+	  vec_scale (&strip_mid[0], &strip_mid[0], 1.0f / use_strip->length);
+	  vec_normalize (&strip_avgnorm[0], &strip_avgnorm[0]);
+
+	  vec_sub (light_incident, &lights->light0_pos_xform[0], &strip_mid[0]);
+	  vec_normalize (light_incident, light_incident);
+
+	  s_dot_n = vec_dot (&strip_avgnorm[0], light_incident);
+	  /* Elevation (T) angle:
+	     s.n = |s| |n| cos T
+	     T = acos (s.n / (|s| * |n|))
+	     |s| and |n| are both 1.  */
+	  t = M_PI / 2 - acosf (s_dot_n);
+
+	  if (t < 0.0f)
+	    t = 0.0f;
+
+	  /* Rotation (Q) angle:
+	     d x r = (|d| |r| sin Q) n
+	     |d x r| / (|d| |r|) = sin Q.  */
+	  vec_scale (f, &strip_avgnorm[0], s_dot_n);
+	  vec_sub (d, light_incident, f);
+	  vec_cross (d_cross_r, d, x_orient);
+	  dxr_len = vec_length (d_cross_r);
+	  d_len = vec_length (d);
+	  q = asinf (dxr_len / d_len);
+
+	  over_pi = vec_dot (d, x_orient) < 0.0f;
+	  if (over_pi)
+	    q = M_PI - q;
+
+	  over_2pi = vec_dot (d_cross_r, &strip_avgnorm[0]) < 0.0f;
+	  if (over_2pi)
+	    q = 2 * M_PI - q;
+
+	  vert.oargb = bumpmap_set_bump_direction (t, 2 * M_PI - q,
+			 obj->bump_map->intensity);
+
 	  pvr_prim (&hdr, sizeof (hdr));
 	  
 	  vert.argb = 0;  /* Not used for this blend mode.  */
+
+	  mat_load (view->projection);
 	  
 	  for (i = 0; i < use_strip->length; i++)
 	    {
-	      float light_incident[3], s_dot_n, t, f[3], d[3];
-	      float d_cross_r[3], dxr_len, d_len, q;
-	      int over_pi, over_2pi;
 	      int last = (i == use_strip->length - 1);
-	      float *invec = &(*str->start)[i][0];
+	      float *invec = &(*use_strip->start)[i][0];
 	      float x, y, z;
 	      
-	      vec_sub (light_incident, &(*str->start)[i][0],
-		       &lights->light0_pos[0]);
-	      vec_normalize (light_incident, light_incident);
-	      
-	      s_dot_n = vec_dot (&(*str->normals)[i][0], light_incident);
-	      /* Elevation (T) angle:
-		 s.n = |s| |n| cos T
-		 T = acos (s.n / (|s| * |n|))
-		 |s| and |n| are both 1.  */
-	      t = M_PI / 2 - acosf (s_dot_n);
-	      
-	      if (t < 0.0f)
-	        t = 0.0f;
-
-	      /* Rotation (Q) angle:
-		 d x r = (|d| |r| sin Q) n
-		 |d x r| / (|d| |r|) = sin Q.  */
-	      vec_scale (f, &(*str->normals)[i][0], s_dot_n);
-	      vec_sub (d, light_incident, f);
-	      vec_cross (d_cross_r, d, x_orient);
-	      dxr_len = vec_length (d_cross_r);
-	      d_len = vec_length (d);
-	      q = asinf (dxr_len / d_len);
-	      
-	      over_pi = vec_dot (d, x_orient) < 0.0f;
-	      if (over_pi)
-	        q = M_PI - q;
-	
-	      over_2pi = vec_dot (d_cross_r, &(*str->normals)[i][0]) < 0.0f;
-	      if (over_2pi)
-	        q = 2 * M_PI - q;
-
-	      vert.oargb = bumpmap_set_bump_direction (t, 2 * M_PI - q,
-			     obj->bump_map->intensity);
-
-	      mat_load (view->projection);
-
 	      x = invec[0];
 	      y = invec[1];
 	      z = invec[2];
@@ -1166,8 +1171,6 @@ object_render_immediate (viewpoint *view, object *obj,
     }
 
   glKosMatrixDirty ();
-
-  amt += 0.01;
 }
 
 strip *

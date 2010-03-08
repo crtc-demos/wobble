@@ -168,6 +168,7 @@ preinit_tube (void)
   fflush (stdout);
   skytex[5] = pvr_mem_malloc (512 * 512 * 2);
   png_to_texture ("/rd/sky26.png", skytex[5], PNG_NO_ALPHA);
+  putchar ('.');
   putchar ('\n');
   
   skybox = create_skybox (30, skytex, 512, 512);
@@ -210,9 +211,19 @@ render_wobble_tube (uint32_t time_offset, void *params, int iparam,
   rot7 += 0.055;
 }
 
+static void
+uninit_wobble_tube (void *params)
+{
+  int i;
+  
+  for (i = 0; i < 6; i++)
+    pvr_mem_free (skytex[i]);
+}
+
 effect_methods wobble_tube_methods = {
   .preinit_assets = &preinit_tube,
   .init_effect = NULL,
+  .prepare_frame = NULL,
   .display_effect = &render_wobble_tube,
-  .uninit_effect = NULL
+  .uninit_effect = &uninit_wobble_tube
 };

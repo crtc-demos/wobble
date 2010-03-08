@@ -1,9 +1,13 @@
 #ifndef TIMING_H
 #define TIMING_H 1
 
+#include <stdint.h>
+
 typedef struct {
   void (*preinit_assets) (void);
   void (*init_effect) (void *params);
+  void (*prepare_frame) (uint32_t time_offset, void *params, int iparam,
+			 viewpoint *view, lighting *lights);
   void (*display_effect) (uint32_t time_offset, void *params, int iparam,
 			  viewpoint *view, lighting *lights, int pass);
   void (*uninit_effect) (void *params);
