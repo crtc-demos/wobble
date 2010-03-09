@@ -24,6 +24,7 @@ typedef struct
   pvr_ptr_t texture;
   unsigned int xsize;
   unsigned int ysize;
+  unsigned int txr_fmt;
   /* Not 100% sure about this either.  */
   float uv_orient[3];
 } strip_attrs;
@@ -112,7 +113,8 @@ extern void object_set_ambient (object *obj, int r, int g, int b);
 extern void object_set_pigment (object *obj, int r, int g, int b);
 extern void object_set_clipping (object *obj, int clip);
 extern void object_set_all_textures (object *obj, pvr_ptr_t txr,
-				     unsigned int xsize, unsigned int ysize);
+				     unsigned int xsize, unsigned int ysize,
+				     unsigned int format);
 extern void object_render_immediate (viewpoint *view, object *,
 				     object_orientation *, lighting *, int);
 extern strip *strip_cons (strip *prev, unsigned int length,

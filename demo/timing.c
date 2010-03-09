@@ -95,8 +95,8 @@ static do_thing_at sequence[] = {
   /*{     0, 30000, &wobble_tube_methods, NULL, 0 }*/
   /*{ 0, 300000, &wave_methods, NULL, 0 }*/
   /*{     0,  10000, &wobble_tube_methods, NULL, 0 },*/
-  /*{ 0, 300000, &fire_methods, NULL, 0 },
-  { 0, 300000, &bumpy_cube_methods, NULL, 0 }*/
+  /*{ 0, 600000, &fire_methods, NULL, 0 },
+  { 0, 600000, &bumpy_cube_methods, NULL, 0 }*/
   { 0, 300000, &foggy_tube_methods, NULL, 0 }
 };
 

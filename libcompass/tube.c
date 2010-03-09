@@ -9,7 +9,8 @@ allocate_tube (int rows, int segments)
   for (r = 0; r < rows; r++)
     {
       strip *newstrip = strip_cons (prev_strip, segments * 2 + 2,
-				    ALLOC_GEOMETRY | ALLOC_NORMALS);
+				    ALLOC_GEOMETRY | ALLOC_TEXCOORDS
+				    | ALLOC_NORMALS);
       prev_strip = newstrip;
     }
   
@@ -26,8 +27,11 @@ fill_tube_data (object *obj, int rows, int segments, float rot1)
     {
       float (*str)[][3];
       float (*norm)[][3];
-      float ang0 = rot1 + 4 * (float) r / (float) rows;
-      float ang1 = rot1 + 4 * (float) (r + 1) / (float) rows;
+      float (*texc)[][2];
+      float up0 = (float) r / (float) rows;
+      float up1 = (float) (r + 1) / (float) rows;
+      float ang0 = rot1 + 4 * up0;
+      float ang1 = rot1 + 4 * up1;
       float mag = 1.0 + 0.35 * fsin (ang0);
       float mag1 = 1.0 + 0.35 * fsin (ang1);
 
@@ -35,11 +39,13 @@ fill_tube_data (object *obj, int rows, int segments, float rot1)
       
       str = strlist->start;
       norm = strlist->normals;
+      texc = strlist->texcoords;
       strlist->inverse = 1;
       
       for (s = 0; s <= segments; s++)
         {
-	  float ang = 2 * M_PI * (float) s / (float) segments;
+	  float around = (float) s / (float) segments;
+	  float ang = 2 * M_PI * around;
 	  float cosang = fcos (ang);
 	  float sinang = fsin (ang);
 	  float norma[3];
@@ -61,6 +67,11 @@ fill_tube_data (object *obj, int rows, int segments, float rot1)
 	  norma[1] = 0.35 * fcos (ang1);
 
 	  vec_normalize (&(*norm)[s * 2 + 1][0], &norma[0]);
+	  
+	  (*texc)[s * 2][0] = around * 2;
+	  (*texc)[s * 2][1] = up0;
+	  (*texc)[s * 2 + 1][0] = around * 2;
+	  (*texc)[s * 2 + 1][1] = up1;
 	}
       
       strlist = strlist->next;

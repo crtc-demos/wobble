@@ -50,10 +50,24 @@ init_foggy_tube (void *params)
   
   vert_fog.fogging = &fogging_fn;
   
-  tube->vertex_fog = &vert_fog;
+  // tube->vertex_fog = &vert_fog;
+  tube->plain_textured = 1;
 
-  png_load_texture ("/rd/white.png", &vert_fog.texture, PNG_NO_ALPHA,
-		    &vert_fog.w, &vert_fog.h);
+ /* png_load_texture ("/rd/white.png", &vert_fog.texture, PNG_NO_ALPHA,
+		    &vert_fog.w, &vert_fog.h);*/
+
+  {
+    kos_img_t tube_txr;
+    pvr_ptr_t texaddr;
+    
+    kmg_to_img ("/rd/concrete_seamless.kmg", &tube_txr);
+    texaddr = pvr_mem_malloc (tube_txr.byte_count);
+    pvr_txr_load_kimg (&tube_txr, texaddr, 0);
+    object_set_all_textures (tube, texaddr, tube_txr.w, tube_txr.h,
+			     PVR_TXRFMT_VQ_ENABLE | PVR_TXRFMT_TWIDDLED
+			     | PVR_TXRFMT_RGB565);
+    kos_img_free (&tube_txr, 0);
+  }
 
   pvr_set_bg_color (0.5, 0.5, 0.5);
 }

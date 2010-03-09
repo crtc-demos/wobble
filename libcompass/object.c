@@ -85,7 +85,7 @@ object_set_clipping (object *obj, int clipping)
 
 void
 object_set_all_textures (object *obj, pvr_ptr_t texture, unsigned int xsize,
-			 unsigned int ysize)
+			 unsigned int ysize, unsigned int txrfmt)
 {
   strip *str;
   
@@ -97,6 +97,7 @@ object_set_all_textures (object *obj, pvr_ptr_t texture, unsigned int xsize,
       str->s_attrs->texture = texture;
       str->s_attrs->xsize = xsize;
       str->s_attrs->ysize = ysize;
+      str->s_attrs->txr_fmt = txrfmt;
     }
 }
 
@@ -873,9 +874,9 @@ object_render_immediate (viewpoint *view, object *obj,
 	  for (; use_strip; use_strip = use_strip->next)
 	    {
 	      pvr_poly_cxt_txr (&cxt, PVR_LIST_OP_POLY,
-		PVR_TXRFMT_RGB565 | PVR_TXRFMT_TWIDDLED,
-		use_strip->s_attrs->xsize, use_strip->s_attrs->ysize,
-		use_strip->s_attrs->texture, PVR_FILTER_BILINEAR);
+		use_strip->s_attrs->txr_fmt, use_strip->s_attrs->xsize,
+		use_strip->s_attrs->ysize, use_strip->s_attrs->texture,
+		PVR_FILTER_BILINEAR);
 	  	  
 	      pvr_poly_compile (&hdr, &cxt);
 

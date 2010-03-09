@@ -39,7 +39,8 @@ preinit_bumpy_cubes (void)
   cube = cube_create (1.0);
 
   bumptxr = bumpmap_load_raw ("/rd/bump.raw", 128, 128);
-  object_set_all_textures (cube, bumptxr, 128, 128);
+  object_set_all_textures (cube, bumptxr, 128, 128,
+			   PVR_TXRFMT_BUMP | PVR_TXRFMT_TWIDDLED);
   bumpmap_auto_uv_orient (cube);
   
   bumpinfo.intensity = 1.0f;
