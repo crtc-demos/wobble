@@ -12,6 +12,7 @@
 
 #include <png/png.h>
 #include <kmg/kmg.h>
+#include <jpeg/jpeg.h>
 
 #define DC_FAST_MATHS 1
 #include <dc/fmath.h>
@@ -49,7 +50,7 @@ static matrix_t mview __attribute__((aligned(32)));
 static matrix_t normxform __attribute__((aligned(32)));
 
 static void
-extra_wobbly_tube_fill (object *obj, int rows, int segments)
+extra_wobbly_tube_fill (object *obj, int rows, int segments, float amp)
 {
   int r, s;
   strip *strlist = obj->striplist;
@@ -67,7 +68,7 @@ extra_wobbly_tube_fill (object *obj, int rows, int segments)
 	  float cosang = fcos (sang);
 	  float sinang = fsin (sang);
 	  
-	  points[r][s][0] = mag * cosang;
+	  points[r][s][0] = mag * cosang + amp;
 	  points[r][s][1] = (16.0 * (float) r / (float) rows) - 8.0;
 	  points[r][s][2] = mag * sinang;
 	  
@@ -103,7 +104,7 @@ extra_wobbly_tube_fill (object *obj, int rows, int segments)
       
       str = strlist->start;
       norm = strlist->normals;
-      strlist->inverse = 1;
+      strlist->inverse = 0;
       
       for (s = 0; s <= segments; s++)
         {
@@ -142,10 +143,11 @@ preinit_tube (void)
 
   object_set_ambient (tube, 64, 0, 0);
   object_set_pigment (tube, 255, 0, 0);
-  object_set_clipping (tube, 0);
+  object_set_clipping (tube, 1);
 
   printf ("Loading sky box texture");
   fflush (stdout);
+#if 0
   skytex[0] = pvr_mem_malloc (512 * 512 * 2);
   png_to_texture ("/rd/sky23.png", skytex[0], PNG_NO_ALPHA);
   putchar ('.');
@@ -169,6 +171,31 @@ preinit_tube (void)
   skytex[5] = pvr_mem_malloc (512 * 512 * 2);
   png_to_texture ("/rd/sky26.png", skytex[5], PNG_NO_ALPHA);
   putchar ('.');
+#else
+  skytex[0] = pvr_mem_malloc (512 * 512 * 2);
+  jpeg_to_texture ("/rd/sky23.jpg", skytex[0], 512, 1);
+  putchar ('.');
+  fflush (stdout);
+  skytex[1] = pvr_mem_malloc (512 * 512 * 2);
+  jpeg_to_texture ("/rd/sky24.jpg", skytex[1], 512, 1);
+  putchar ('.');
+  fflush (stdout);
+  skytex[2] = pvr_mem_malloc (512 * 512 * 2);
+  jpeg_to_texture ("/rd/sky27.jpg", skytex[2], 512, 1);
+  putchar ('.');
+  fflush (stdout);
+  skytex[3] = pvr_mem_malloc (512 * 512 * 2);
+  jpeg_to_texture ("/rd/sky28.jpg", skytex[3], 512, 1);
+  putchar ('.');
+  fflush (stdout);
+  skytex[4] = pvr_mem_malloc (512 * 512 * 2);
+  jpeg_to_texture ("/rd/sky25.jpg", skytex[4], 512, 1);
+  putchar ('.');
+  fflush (stdout);
+  skytex[5] = pvr_mem_malloc (512 * 512 * 2);
+  jpeg_to_texture ("/rd/sky26.jpg", skytex[5], 512, 1);
+  putchar ('.');
+#endif
   putchar ('\n');
   
   skybox = create_skybox (30, skytex, 512, 512);
@@ -186,11 +213,12 @@ render_wobble_tube (uint32_t time_offset, void *params, int iparam,
   if (pass != 0)
     return;
 
-  extra_wobbly_tube_fill (tube, ROWS, SEGMENTS);
+  extra_wobbly_tube_fill (tube, ROWS, SEGMENTS, 0.0);
 
   glMatrixMode (GL_MODELVIEW);
 
   glGetFloatv (GL_MODELVIEW_MATRIX, &mview[0][0]);
+  lights->active = 0;
   object_render_immediate (view, skybox, &obj_orient, lights, 0);
 
   glKosMatrixDirty ();
@@ -199,10 +227,11 @@ render_wobble_tube (uint32_t time_offset, void *params, int iparam,
   glTranslatef (0, 0, 4);
   glGetFloatv (GL_MODELVIEW_MATRIX, &mview[0][0]);
   vec_normal_from_modelview (&normxform[0][0], &mview[0][0]);
+  lights->active = 1;
   object_render_immediate (view, tube, &obj_orient, lights, 0);
   glPopMatrix ();
 
-  rot1 += 0.05;
+  rot1 += 0.05 + audio_amplitude () * 0.5;
   rot2 += 0.04;
   rot3 += 0.03;
   rot4 += 0.045;

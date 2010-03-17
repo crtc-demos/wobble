@@ -21,4 +21,6 @@ typedef struct {
   int iparam;
 } do_thing_at;
 
+extern float audio_amplitude (void);
+
 #endif

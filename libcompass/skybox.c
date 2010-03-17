@@ -63,14 +63,17 @@ create_skybox (float radius, pvr_ptr_t textures[6], unsigned int xsize,
 	}
 
       newstrip->s_attrs = malloc (sizeof (strip_attrs));
+      printf ("allocated s_attrs %p\n", newstrip->s_attrs);
       newstrip->s_attrs->texture = textures[str];
       newstrip->s_attrs->xsize = xsize;
       newstrip->s_attrs->ysize = ysize;
+      /* Not very flexible!  */
+      newstrip->s_attrs->txr_fmt = PVR_TXRFMT_RGB565 | PVR_TXRFMT_TWIDDLED;
       newstrip->inverse = 1;
     }
 
   newobj = object_create_default (newstrip);
-  newobj->plain_textured = 1;
+  newobj->textured = 1;
   newobj->clip = 1;
 
   return newobj;

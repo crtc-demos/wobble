@@ -22,6 +22,8 @@ static pvr_ptr_t warp_texture[2];
 static pvr_ptr_t cooling_texture;
 static int warp_active = 0;
 
+static pvr_ptr_t flame_texture;
+
 static void
 render_cooling_texture (void)
 {
@@ -70,6 +72,9 @@ render_cooling_texture (void)
   free (cooltmp);
   
   dbgio_printf ("done.\n");
+  
+  flame_texture = pvr_mem_malloc (256 * 256 * 2);
+  png_to_texture ("/rd/flametex.png", flame_texture, PNG_NO_ALPHA);
 #undef NOISEFN
 }
 
@@ -139,11 +144,13 @@ draw_box (void)
         }
     }
 
+
+#if 0
   pvr_poly_cxt_col (&cxt, PVR_LIST_OP_POLY);
   pvr_poly_compile (&poly, &cxt);
   
   pvr_prim (&poly, sizeof (poly));
-  
+
   /* "Seed" square.  */
   vert.flags = PVR_CMD_VERTEX;
   vert.x = 320 + fcos (rot1) * 50;
@@ -166,6 +173,7 @@ draw_box (void)
   vert.x = 320 + fcos (rot1 + M_PI) * 50;
   vert.y = 240 + fsin (rot1 + M_PI) * 50;
   pvr_prim (&vert, sizeof (vert));
+#endif
 
 #if 0
   /* And another...  */
@@ -215,7 +223,7 @@ draw_box (void)
   pvr_prim (&vert, sizeof (vert));
 #endif
 
-  rot1 += 0.05;
+  rot1 += 0.005;
   if (rot1 > 2 * M_PI)
     rot1 -= 2 * M_PI;
   
@@ -233,7 +241,8 @@ draw_texture (void)
 		    PVR_TXRFMT_RGB565 | PVR_TXRFMT_NONTWIDDLED, 1024, 512,
 		    warp_texture[1 - warp_active], PVR_FILTER_NONE);
   cxt.blend.src = PVR_BLEND_ONE;
-  cxt.blend.dst = PVR_BLEND_ONE;
+  cxt.blend.dst = PVR_BLEND_INVDESTCOLOR;
+  cxt.txr.env = PVR_TXRENV_MODULATE;
   pvr_poly_compile (&poly, &cxt);
   
   pvr_prim (&poly, sizeof (poly));
@@ -266,10 +275,6 @@ draw_texture (void)
   vert.u = 640.0f / 1024.0f;
   vert.v = 480.0f / 512.0f;
   pvr_prim (&vert, sizeof (vert));
-  
-  rot1 += 0.05;
-  if (rot1 > 2 * M_PI)
-    rot1 -= 2 * M_PI;
 }
 
 static void
@@ -313,7 +318,52 @@ draw_cooler (void)
   vert.u = 640.0f / 1024.0f;
   vert.v = (cooling_offset + 480.0f) / 512.0f;
   pvr_prim (&vert, sizeof (vert));
-  
+
+  /* Draw the flame bit too!  */
+  {
+    pvr_poly_cxt_t cxt;
+    pvr_poly_hdr_t hdr;
+    int i;
+    
+    pvr_poly_cxt_txr (&cxt, PVR_LIST_TR_POLY,
+		      PVR_TXRFMT_RGB565 | PVR_TXRFMT_TWIDDLED,
+		      256, 256, flame_texture, PVR_FILTER_BILINEAR);
+    cxt.blend.src = PVR_BLEND_ONE;
+    cxt.blend.dst = PVR_BLEND_ONE;
+    cxt.txr.env = PVR_TXRENV_MODULATE;
+    pvr_poly_compile (&poly, &cxt);
+    
+    pvr_prim (&poly, sizeof (poly));
+    
+    for (i = 0; i < 20; i++)
+      {
+        float ang = (float) i * 2 * M_PI / 20.0f;
+	float ang1 = (float) (i + 1) * 2 * M_PI / 20.0f;
+	float amp = audio_amplitude ();
+
+        vert.flags = PVR_CMD_VERTEX;
+	vert.x = 320;
+	vert.y = 240;
+	vert.z = SEED_DEPTH;
+	vert.u = vert.v = 0.5;
+	vert.argb = 0xffffffff;
+	vert.oargb = 0x0;
+	pvr_prim (&vert, sizeof (vert));
+	
+	vert.flags = PVR_CMD_VERTEX;
+	vert.x = 320 + fcos (ang) * (40 + amp * 10);
+	vert.y = 270 + fsin (ang) * 60;
+	vert.u = 0.5 + fcos (rot1) * 0.5;
+	vert.v = 0.5 + fsin (rot1) * 0.5;
+	pvr_prim (&vert, sizeof (vert));
+	
+	vert.flags = PVR_CMD_VERTEX_EOL;
+	vert.x = 320 + fcos (ang1) * (40 + amp * 10);
+	vert.y = 270 + fsin (ang1) * 60;
+	pvr_prim (&vert, sizeof (vert));
+      }
+  }
+
   cooling_offset += 3;
   if (cooling_offset > 512)
     cooling_offset -= 512;

@@ -255,6 +255,30 @@ vec_mat_apply (FLOAT_TYPE *dst, const FLOAT_TYPE *a, const FLOAT_TYPE *b)
   vec_transform_fipr (&dst[12], a, &b[12]);
 }
 
+static __inline__ void
+vec_extract_rotation (FLOAT_TYPE *dst, const FLOAT_TYPE *src)
+{
+  dst[0] = src[0];
+  dst[1] = src[1];
+  dst[2] = src[2];
+  dst[3] = 0.0;
+  
+  dst[4] = src[4];
+  dst[5] = src[5];
+  dst[6] = src[6];
+  dst[7] = 0.0;
+  
+  dst[8] = src[8];
+  dst[9] = src[9];
+  dst[10] = src[10];
+  dst[11] = 0.0;
+  
+  dst[12] = 0.0;
+  dst[13] = 0.0;
+  dst[14] = 0.0;
+  dst[15] = 1.0;
+}
+
 /* Transpose the rotation part of (an orthogonal) matrix only.  */
 
 static __inline__ void

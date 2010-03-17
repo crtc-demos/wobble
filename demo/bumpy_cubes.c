@@ -43,6 +43,9 @@ preinit_bumpy_cubes (void)
 			   PVR_TXRFMT_BUMP | PVR_TXRFMT_TWIDDLED);
   bumpmap_auto_uv_orient (cube);
   
+  object_set_ambient (cube, 0.2, 0.1, 0.0);
+  object_set_pigment (cube, 1.0, 0.7, 0.0);
+  
   bumpinfo.intensity = 1.0f;
   cube->bump_map = &bumpinfo;
   
@@ -63,11 +66,7 @@ prepare_frame (uint32_t time_offset, void *params, int iparam, viewpoint *view,
   float rot2_rad = rot2 * M_PI / 180.0f;
   float radius = 3.0f;
 
-  lights->light0_pos[0] = 0;
-  lights->light0_pos[1] = 0;
-  lights->light0_pos[2] = 8.5;
-  vec_transform3_fipr (&lights->light0_pos_xform[0], &view->camera[0][0],
-		       &lights->light0_pos[0]);
+  light_set_pos (lights, 0, 0.0, 0.0, 4.0);
 
   glKosMatrixDirty ();
 
@@ -108,6 +107,7 @@ static void
 render_bumpy_cubes (uint32_t time_offset, void *params, int iparam,
 		    viewpoint *view, lighting *lights, int pass)
 {
+  light_set_active (lights, 1);
   object_render_immediate (view, cube, &obj_orient0, lights, pass);
   object_render_immediate (view, cube, &obj_orient1, lights, pass);
   object_render_immediate (view, cube, &obj_orient2, lights, pass);

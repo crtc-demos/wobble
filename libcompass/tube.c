@@ -40,7 +40,7 @@ fill_tube_data (object *obj, int rows, int segments, float rot1)
       str = strlist->start;
       norm = strlist->normals;
       texc = strlist->texcoords;
-      strlist->inverse = 1;
+      strlist->inverse = 0;
       
       for (s = 0; s <= segments; s++)
         {
@@ -50,28 +50,28 @@ fill_tube_data (object *obj, int rows, int segments, float rot1)
 	  float sinang = fsin (ang);
 	  float norma[3];
 	  
-	  (*str)[s * 2][0] = mag * cosang;
-	  (*str)[s * 2][1] = (2.0 * (float) r / (float) rows) - 1.0;
-	  (*str)[s * 2][2] = mag * sinang;
+	  (*str)[s * 2][0] = mag1 * cosang;
+	  (*str)[s * 2][1] = (2.0 * (float) (r + 1) / (float) rows) - 1.0;
+	  (*str)[s * 2][2] = mag1 * sinang;
 
-	  (*str)[s * 2 + 1][0] = mag1 * cosang;
-	  (*str)[s * 2 + 1][1] = (2.0 * (float) (r + 1) / (float) rows) - 1.0;
-	  (*str)[s * 2 + 1][2] = mag1 * sinang;
+	  (*str)[s * 2 + 1][0] = mag * cosang;
+	  (*str)[s * 2 + 1][1] = (2.0 * (float) r / (float) rows) - 1.0;
+	  (*str)[s * 2 + 1][2] = mag * sinang;
 	  
 	  norma[0] = cosang;
-	  norma[1] = 0.35 * fcos (ang0);
+	  norma[1] = 0.35 * fcos (ang1);
 	  norma[2] = sinang;
 	  
 	  vec_normalize (&(*norm)[s * 2][0], &norma[0]);
 	  
-	  norma[1] = 0.35 * fcos (ang1);
+	  norma[1] = 0.35 * fcos (ang0);
 
 	  vec_normalize (&(*norm)[s * 2 + 1][0], &norma[0]);
 	  
 	  (*texc)[s * 2][0] = around * 2;
-	  (*texc)[s * 2][1] = up0;
+	  (*texc)[s * 2][1] = up1;
 	  (*texc)[s * 2 + 1][0] = around * 2;
-	  (*texc)[s * 2 + 1][1] = up1;
+	  (*texc)[s * 2 + 1][1] = up0;
 	}
       
       strlist = strlist->next;

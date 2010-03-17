@@ -12,16 +12,15 @@
 
 void
 restrip_list (strip *strips_in, strip_classify_fn fn, strip *strip_starts[],
-	      strip *strip_ends[], strip **stripbuf, unsigned int *capacity)
+	      strip *strip_ends[], restrip_allocator_fn allocfn)
 {
   strip *strip_ptr;
-  unsigned int entries = 0;
   
   for (strip_ptr = strips_in; strip_ptr; strip_ptr = strip_ptr->next)
     {
       unsigned int i;
       int current_class = -1;
-      unsigned int strip_length = 1;
+      unsigned int strip_length = 0;
       float (*strip_start)[][3] = strip_ptr->start;
       unsigned int start_pos = 0;
       
@@ -36,19 +35,10 @@ restrip_list (strip *strips_in, strip_classify_fn fn, strip *strip_starts[],
 	    {
 	      if (current_class >= 0)
 	        {
-		  strip *class_end = strip_ends[current_class], *newptr;
+		  strip *newptr = allocfn (sizeof (strip));
 		  
-		  if (entries == *capacity)
-		    {
-		      (*capacity) *= 2;
-		      *stripbuf = realloc (*stripbuf,
-					   sizeof (strip) * (*capacity));
-		    }
-		  
-		  newptr = &(*stripbuf)[entries];
-		  
-		  if (class_end != NULL)
-		    class_end->next = newptr;
+		  if (strip_ends[current_class] != NULL)
+		    strip_ends[current_class]->next = newptr;
 
 		  newptr->next = 0;
 		  
@@ -62,8 +52,9 @@ restrip_list (strip *strips_in, strip_classify_fn fn, strip *strip_starts[],
 
 		  newptr->v_attrs = &strip_ptr->v_attrs[start_pos];
 		  newptr->s_attrs = strip_ptr->s_attrs;
-		  newptr->normals = (float (*)[][3])
-				    &(*strip_ptr->normals)[start_pos];
+		  newptr->normals = (strip_ptr->normals)
+		    ? (float (*)[][3]) &(*strip_ptr->normals)[start_pos]
+		    : NULL;
 		  newptr->texcoords = (strip_ptr->texcoords)
 		    ? (float (*)[][2]) &(*strip_ptr->texcoords)[start_pos]
 		    : NULL;
@@ -71,8 +62,6 @@ restrip_list (strip *strips_in, strip_classify_fn fn, strip *strip_starts[],
 		  strip_ends[current_class] = newptr;
 		  if (strip_starts[current_class] == NULL)
 		    strip_starts[current_class] = newptr;
-		  
-		  entries++;
 		}
 	      
 	      strip_length = 1;
@@ -84,18 +73,10 @@ restrip_list (strip *strips_in, strip_classify_fn fn, strip *strip_starts[],
 
       if (strip_length != 0 && current_class >= 0)
         {
-	  strip *class_end = strip_ends[current_class], *newptr;
+	  strip *newptr = allocfn (sizeof (strip));
 	  
-	  if (entries == *capacity)
-	    {
-	      (*capacity) *= 2;
-	      *stripbuf = realloc (*stripbuf, sizeof (strip) * (*capacity));
-	    }
-	  
-	  newptr = &(*stripbuf)[entries];
-	  
-	  if (class_end != NULL)
-	    class_end->next = newptr;
+	  if (strip_ends[current_class] != NULL)
+	    strip_ends[current_class]->next = newptr;
 
 	  newptr->next = 0;
 	  
@@ -109,15 +90,14 @@ restrip_list (strip *strips_in, strip_classify_fn fn, strip *strip_starts[],
 
 	  newptr->v_attrs = &strip_ptr->v_attrs[start_pos];
 	  newptr->s_attrs = strip_ptr->s_attrs;
-	  newptr->normals = (float (*)[][3]) &(*strip_ptr->normals)[start_pos];
+	  newptr->normals = (strip_ptr->normals)
+	    ? (float (*)[][3]) &(*strip_ptr->normals)[start_pos] : NULL;
 	  newptr->texcoords = (strip_ptr->texcoords)
 	    ? (float (*)[][2]) &(*strip_ptr->texcoords)[start_pos] : NULL;
 	  
 	  strip_ends[current_class] = newptr;
 	  if (strip_starts[current_class] == NULL)
 	    strip_starts[current_class] = newptr;
-	  
-	  entries++;
 	}
     }  
 }

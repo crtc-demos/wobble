@@ -29,6 +29,8 @@
 #include "perlin.h"
 #include "perlin-3d.h"
 
+#undef DEBUG
+
 /*
 #ifndef SLOW_PVR_PRIM
 #define pvr_prim (DATA, SIZE) sq_cpy ((void *) PVR_TA_INPUT, (DATA), (SIZE))
@@ -49,7 +51,7 @@ object_create_default (strip *strips)
   newobj->pigment.b = 192;
   newobj->clip = 0;
   newobj->max_strip_length = -1;
-  newobj->plain_textured = 0;
+  newobj->textured = 0;
   newobj->fake_phong = NULL;
   newobj->env_map = NULL;
   newobj->bump_map = NULL;
@@ -118,11 +120,6 @@ max_strip_length (object *obj)
 
   return max_length;
 }
-
-static strip *stripbuf = NULL;
-static unsigned int capacity = 0;
-static strip *clipped_stripbuf = NULL;
-static unsigned int clipped_capacity = 0;
 
 /* Non-textured, packed colour.  */
 
@@ -352,7 +349,7 @@ static mem_pool *current_pool = NULL;
 
 #define POOL_PART_SIZE	(64 * 1024)
 
-void
+static void
 pool_clear (void)
 {
   if (pool.buffer == NULL)
@@ -374,7 +371,7 @@ pool_clear (void)
   current_pool = &pool;
 }
 
-void *
+static void *
 pool_alloc (unsigned int amt)
 {
 retry:
@@ -464,18 +461,6 @@ object_render_immediate (viewpoint *view, object *obj,
   
   attr_buf = pool_alloc (sizeof (vertex_attrs) * strip_max);
   
-  if (capacity == 0)
-    {
-      capacity = 10;
-      stripbuf = malloc (sizeof (strip) * capacity);
-    }
-  
-  if (clipped_capacity == 0)
-    {
-      clipped_capacity = 10;
-      clipped_stripbuf = malloc (sizeof (strip) * capacity);
-    }
-
   if (obj->env_map)
     vec_transform3_fipr (&c_eyepos[0], (float *) view->camera,
 			 &view->eye_pos[0]);
@@ -490,6 +475,10 @@ object_render_immediate (viewpoint *view, object *obj,
 
       mat_load (obj_orient->modelview);
 
+#ifdef DEBUG
+      printf ("transform points\n");
+#endif
+
       for (i = 0; i < str->length; i++)
         {
 	  float *vec = &(*str->start)[i][0], *outvec = &(*trans)[i][0];
@@ -501,27 +490,42 @@ object_render_immediate (viewpoint *view, object *obj,
 	  outvec[2] = z;
 	}
 
-      mat_load (obj_orient->normal_xform);
+#ifdef DEBUG
+      printf ("transform normals\n");
+#endif
 
-      for (i = 0; i < str->length; i++)
+      if (str->normals)
         {
-	  float *norm = &(*str->normals)[i][0], *outnorm = &(*trans_norm)[i][0];
-	  float x = norm[0], y = norm[1], z = norm[2], w = 1.0;
-	  PREFETCH (&norm[5]);
-	  mat_trans_nodiv (x, y, z, w);
-	  outnorm[0] = x;
-	  outnorm[1] = y;
-	  outnorm[2] = z;
+	  mat_load (obj_orient->normal_xform);
+
+	  for (i = 0; i < str->length; i++)
+            {
+	      float *norm = &(*str->normals)[i][0];
+	      float *outnorm = &(*trans_norm)[i][0];
+	      float x = norm[0], y = norm[1], z = norm[2], w = 1.0;
+	      PREFETCH (&norm[5]);
+	      mat_trans_nodiv (x, y, z, w);
+	      outnorm[0] = x;
+	      outnorm[1] = y;
+	      outnorm[2] = z;
+	    }
 	}
 
       transformed_strip.start = trans;
       transformed_strip.length = str->length;
-      transformed_strip.normals = trans_norm;
+      if (str->normals)
+	transformed_strip.normals = trans_norm;
+      else
+        transformed_strip.normals = NULL;
       transformed_strip.texcoords = str->texcoords;
       transformed_strip.inverse = str->inverse;
       transformed_strip.v_attrs = attr_buf;
       transformed_strip.s_attrs = str->s_attrs;
       transformed_strip.next = NULL;
+
+#ifdef DEBUG
+      printf ("before clip loop\n");
+#endif
 
       if (obj->clip)
         {
@@ -530,6 +534,10 @@ object_render_immediate (viewpoint *view, object *obj,
 	  strip *cstr;
 	  strip *clipped_output;
 	  unsigned int alloc_mask = 0;
+
+#ifdef DEBUG
+	  printf ("(clipping)\n");
+#endif
 	  
 	  /* A sneaky global!  */
 	  near_plane = view->near;
@@ -537,8 +545,24 @@ object_render_immediate (viewpoint *view, object *obj,
 	  /* Split strips into 0 (fully visible) or 1 (partly visible,
 	     clipped).  Drop fully invisible triangles/strips on the floor.  */
 	  restrip_list (&transformed_strip, triangle_clipping_classifier,
-			strip_starts, strip_ends, &clipped_stripbuf,
-			&clipped_capacity);
+			strip_starts, strip_ends, pool_alloc);
+
+#if 0
+	  {
+	    unsigned int i;
+	    
+	    for (i = 0; i < 2; i++)
+	      {
+	        strip *walk;
+	        printf ("strip_starts[%i]=%p\n", i, strip_starts[i]);
+		for (walk = strip_starts[i]; walk; walk = walk->next)
+		  {
+		    printf ("list %d, item: %p\n", i, walk);
+		  }
+		printf ("strip_ends[%i]=%p\n", i, strip_ends[i]);
+	      }
+	  }
+#endif
 
 	  /* Glue clipped strips onto the start of the fully-visible strip
 	     list.  */
@@ -589,9 +613,10 @@ object_render_immediate (viewpoint *view, object *obj,
 		        {
 			  memcpy (&points[outidx][0], &(*cstr->start)[i + j][0],
 				  3 * sizeof (float));
-			  memcpy (&normals[outidx][0],
-				  &(*cstr->normals)[i + j][0],
-				  3 * sizeof (float));
+			  if (cstr->normals)
+			    memcpy (&normals[outidx][0],
+				    &(*cstr->normals)[i + j][0],
+				    3 * sizeof (float));
 			  if (cstr->texcoords)
 			    memcpy (&texcs[outidx][0],
 				    &(*cstr->texcoords)[i + j][0],
@@ -611,10 +636,11 @@ object_render_immediate (viewpoint *view, object *obj,
 			  vec_interpolate (&points[outidx][0],
 					   &(*cstr->start)[i + j][0],
 					   &(*cstr->start)[i + next][0], param);
-			  vec_interpolate (&normals[outidx][0],
-					   &(*cstr->normals)[i + j][0],
-					   &(*cstr->normals)[i + next][0],
-					   param);
+			  if (cstr->normals)
+			    vec_interpolate (&normals[outidx][0],
+					     &(*cstr->normals)[i + j][0],
+					     &(*cstr->normals)[i + next][0],
+					     param);
 			  if (cstr->texcoords)
 			    vec_interpolate2 (&texcs[outidx][0],
 					      &(*cstr->texcoords)[i + j][0],
@@ -633,8 +659,9 @@ object_render_immediate (viewpoint *view, object *obj,
 		         order as the original strip.  */
 		      memcpy (&(*clipped_output->start)[0][0],
 			      points, 3 * 3 * sizeof (float));
-		      memcpy (&(*clipped_output->normals)[0][0],
-			      normals, 3 * 3 * sizeof (float));
+		      if (clipped_output->normals)
+			memcpy (&(*clipped_output->normals)[0][0],
+				normals, 3 * 3 * sizeof (float));
 		      if (clipped_output->texcoords)
 		        memcpy (&(*clipped_output->texcoords)[0][0],
 				texcs, 3 * 2 * sizeof (float));
@@ -651,8 +678,10 @@ object_render_immediate (viewpoint *view, object *obj,
 			  {
 			    memcpy (&(*clipped_output->start)[j][0],
 				    &points[order[j]][0], 3 * sizeof (float));
-			    memcpy (&(*clipped_output->normals)[j][0],
-				    &normals[order[j]][0], 3 * sizeof (float));
+			    if (clipped_output->normals)
+			      memcpy (&(*clipped_output->normals)[j][0],
+				      &normals[order[j]][0],
+				      3 * sizeof (float));
 			    if (clipped_output->texcoords)
 			      memcpy (&(*clipped_output->texcoords)[j][0],
 				      &texcs[order[j]][0], 2 * sizeof (float));
@@ -670,6 +699,17 @@ object_render_immediate (viewpoint *view, object *obj,
 	}
       else
         use_strip = &transformed_strip;
+
+#ifdef DEBUG
+      printf ("use_strip now %p\n", use_strip);
+#endif
+
+      if (!use_strip)
+        continue;
+
+#ifdef DEBUG
+      printf ("use_strip now %p (2)\n", use_strip);
+#endif
 
       if (obj->env_map)
         {
@@ -694,7 +734,7 @@ object_render_immediate (viewpoint *view, object *obj,
 		 &c_eyepos[0], *(view->inv_camera_orientation));
 
 	  restrip_list (use_strip, envmap_classify_triangle,
-			strip_starts, strip_ends, &stripbuf, &capacity);
+			strip_starts, strip_ends, pool_alloc);
 
 	  mat_load (view->projection);
 
@@ -806,25 +846,38 @@ object_render_immediate (viewpoint *view, object *obj,
 
       /* First pass for bump mapping, fake phong -- for now, plain
          gouraud-shaded polygons only.  */
-      if (pass == 0 && /*(obj->bump_map || obj->fake_phong) &&*/ !obj->env_map
-	  && !obj->vertex_fog && !obj->plain_textured)
+      if (pass == 0 && !obj->env_map)
         {
 	  /* First pass, dot-product lighting.  */
 	  pvr_poly_cxt_t cxt;
 	  pvr_poly_hdr_t hdr;
 	  pvr_vertex_t vert;
+
+#ifdef DEBUG
+	  printf ("pass 0, not environment mapping\n");
+#endif
 	  
-	  pvr_poly_cxt_col (&cxt, PVR_LIST_OP_POLY);
+	  if (obj->textured)
+	    {
+	      pvr_poly_cxt_txr (&cxt, PVR_LIST_OP_POLY,
+		use_strip->s_attrs->txr_fmt, use_strip->s_attrs->xsize,
+		use_strip->s_attrs->ysize, use_strip->s_attrs->texture,
+		PVR_FILTER_BILINEAR);
+	    }
+	  else
+	    pvr_poly_cxt_col (&cxt, PVR_LIST_OP_POLY);
 	  
 	  if (obj->bump_map)
 	    cxt.txr.env = PVR_TXRENV_DECAL;
+	  else
+	    cxt.txr.env = PVR_TXRENV_MODULATE;
 	  
 	  pvr_poly_compile (&hdr, &cxt);
 
 	  pvr_prim (&hdr, sizeof (hdr));
 	  
 	  vert.oargb = 0;
-	  vert.argb = PVR_PACK_COLOR (1.0f, 1.0f, 0.7f, 0.0f);
+	  vert.argb = PVR_PACK_COLOR (1.0f, 1.0f, 1.0f, 1.0f);
 
 	  mat_load (view->projection);
 
@@ -832,8 +885,12 @@ object_render_immediate (viewpoint *view, object *obj,
 	    for (i = 0; i < use_strip->length; i++)
 	      {
 		float *invec = &(*use_strip->start)[i][0];
+		float *texc = NULL;
 		float x, y, z;
 		int last = (i == use_strip->length - 1);
+
+		if (use_strip->texcoords)
+		  texc = &(*use_strip->texcoords)[i][0];
 
 		//PREFETCH (&(*use_strip->start)[i + 2][0]);
 
@@ -845,73 +902,31 @@ object_render_immediate (viewpoint *view, object *obj,
 		//PREFETCH (&(*use_strip->normals)[i + 2][0]);
 
 		vert.flags = (last) ? PVR_CMD_VERTEX_EOL : PVR_CMD_VERTEX;
-		if (!obj->bump_map)
+		if (!obj->bump_map && use_strip->normals && lights->active > 0)
 		  vert.argb = lightsource_diffuse (&(*use_strip->start)[i][0],
 		    &(*use_strip->normals)[i][0], &obj->ambient, &obj->pigment,
-		    &lights->light0_pos_xform[0]);
+		    &lights->light[0].pos_xform[0]);
 		vert.x = x;
 		vert.y = y;
 		vert.z = z;
-		vert.u = 0;
-		vert.v = 0;
+		if (texc)
+		  {
+		    vert.u = texc[0];
+		    vert.v = texc[1];
+		  }
+		else
+		  {
+		    vert.u = 0;
+		    vert.v = 0;
+		  }
 		pvr_prim (&vert, sizeof (vert));
 		if (i == 0 && use_strip->inverse)
 		  pvr_prim (&vert, sizeof (vert));
 	      }
 	}
 
-      if (pass == 0 && obj->plain_textured)
-        {
-	  pvr_poly_cxt_t cxt;
-	  pvr_poly_hdr_t hdr;
-	  pvr_vertex_t vert;
-	  	  
-	  vert.oargb = 0;
-	  vert.argb = PVR_PACK_COLOR (1.0f, 1.0f, 1.0f, 1.0f);
-
-	  mat_load (view->projection);
-
-	  for (; use_strip; use_strip = use_strip->next)
-	    {
-	      pvr_poly_cxt_txr (&cxt, PVR_LIST_OP_POLY,
-		use_strip->s_attrs->txr_fmt, use_strip->s_attrs->xsize,
-		use_strip->s_attrs->ysize, use_strip->s_attrs->texture,
-		PVR_FILTER_BILINEAR);
-	  	  
-	      pvr_poly_compile (&hdr, &cxt);
-
-	      pvr_prim (&hdr, sizeof (hdr));
-
-	      for (i = 0; i < use_strip->length; i++)
-		{
-		  float *invec = &(*use_strip->start)[i][0];
-		  float *texc = &(*use_strip->texcoords)[i][0];
-		  float x, y, z;
-		  int last = (i == use_strip->length - 1);
-
-		  //PREFETCH (&(*use_strip->start)[i + 2][0]);
-
-		  x = invec[0];
-		  y = invec[1];
-		  z = invec[2];
-		  mat_trans_single (x, y, z);
-
-		  //PREFETCH (&(*use_strip->normals)[i + 2][0]);
-
-		  vert.flags = (last) ? PVR_CMD_VERTEX_EOL : PVR_CMD_VERTEX;
-		  vert.x = x;
-		  vert.y = y;
-		  vert.z = z;
-		  vert.u = texc[0];
-		  vert.v = texc[1];
-		  pvr_prim (&vert, sizeof (vert));
-		  if (i == 0 && use_strip->inverse)
-		    pvr_prim (&vert, sizeof (vert));
-		}
-	    }
-	}
-
-      /* First pass for vertex fog (experimental).  */
+      /* First pass for vertex fog (experimental).
+         This is wrong.  Fog should be rendered in one pass.  */
       if (pass == 1 && obj->vertex_fog)
         {
 	  pvr_poly_cxt_t cxt;
@@ -959,9 +974,8 @@ object_render_immediate (viewpoint *view, object *obj,
 
 		vert.flags = (last) ? PVR_CMD_VERTEX_EOL : PVR_CMD_VERTEX;
 		vert.argb = lightsource_diffuse (&invec[0],
-						 &(*iter->normals)[i][0],
-						 &obj->ambient, &obj->pigment,
-						 &lights->light0_pos_xform[0]);
+			      &(*iter->normals)[i][0], &obj->ambient,
+			      &obj->pigment, &lights->light[0].pos_xform[0]);
 		fogginess = obj->vertex_fog->fogging (x, y, z,
 						      &iter->v_attrs[i]);
 
@@ -1007,16 +1021,18 @@ object_render_immediate (viewpoint *view, object *obj,
 	    for (i = 0; i < iter->length; i++)
 	      lightsource_fake_phong ((float *) &(*iter->start)[i][0],
 				      (float *) &(*iter->normals)[i][0],
-				      &lights->light0_pos_xform[0],
-				      &lights->light0_up_xform[0],
+				      &lights->light[0].pos_xform[0],
+				      &lights->light[0].up_xform[0],
 				      &view->eye_pos[0],
 				      view->inv_camera_orientation,
 				      iter->v_attrs, i);
 
 	  restrip_list (use_strip, fakephong_classify_triangle,
-			strip_starts, strip_ends, &stripbuf, &capacity);
+			strip_starts, strip_ends, pool_alloc);
 
 	  mat_load (view->projection);
+
+	  pvr_prim (&hdr, sizeof (hdr));
 
 	  for (str_out = strip_starts[0]; str_out; str_out = str_out->next)
             {
@@ -1025,8 +1041,6 @@ object_render_immediate (viewpoint *view, object *obj,
 
               if (str_out->length < 3)
 	        continue;
-
-	      pvr_prim (&hdr, sizeof (hdr));
 
 	      vert.argb = intens;
 	      vert.oargb = 0;
@@ -1107,7 +1121,8 @@ object_render_immediate (viewpoint *view, object *obj,
 	  vec_scale (&strip_mid[0], &strip_mid[0], 1.0f / use_strip->length);
 	  vec_normalize (&strip_avgnorm[0], &strip_avgnorm[0]);
 
-	  vec_sub (light_incident, &lights->light0_pos_xform[0], &strip_mid[0]);
+	  vec_sub (light_incident, &lights->light[0].pos_xform[0],
+		   &strip_mid[0]);
 	  vec_normalize (light_incident, light_incident);
 
 	  s_dot_n = vec_dot (&strip_avgnorm[0], light_incident);

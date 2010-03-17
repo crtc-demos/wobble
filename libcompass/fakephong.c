@@ -120,7 +120,6 @@ lightsource_diffuse (const float *vert, const float *norm,
   float light_to_vertex[3];
   float out;
   int r, g, b;
-  float x, y, z, w = 1.0f;
 
   vec_sub (light_to_vertex, light_pos, vert);
   vec_normalize (light_to_vertex, light_to_vertex);
@@ -148,11 +147,6 @@ lightsource_fake_phong (float *vertex, float *norm, const float *light_pos,
   float eye_to_vertex[3], tmp[3], reflection[3];
   float light_to_vertex[3];
   float eye_dot_norm;
-  float x, y, z, w = 1.0f;
-  
-  /* FIXME: We need to transform the light position by the camera matrix, not
-     use the untransformed position (or the inverse-orientation part used for
-     env mapping).  */
   
   vec_sub (light_to_vertex, light_pos, vertex);
   vec_normalize (norm_light, light_to_vertex);
@@ -163,16 +157,7 @@ lightsource_fake_phong (float *vertex, float *norm, const float *light_pos,
   eye_dot_norm = vec_dot (eye_to_vertex, norm);
   vec_scale (tmp, norm, 2.0 * eye_dot_norm);
   vec_sub (reflection, tmp, eye_to_vertex);
-  
-  /*mat_load (invcamera);
-  x = reflection[0];
-  y = reflection[1];
-  z = reflection[2];
-  mat_trans_nodiv (x, y, z, w);
-  reflection[0] = x;
-  reflection[1] = y;
-  reflection[2] = z;*/
-  
+
   if (eye_dot_norm < 0)
     vertex_info[idx].fakephong.transformed_z = -0.01;
   else

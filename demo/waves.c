@@ -87,6 +87,7 @@ update_grid (void)
   const float drag = 0.0045;
 #endif
   int i, j;
+  float amp = audio_amplitude ();
 
   const float yfac = sin (M_PI / 3.0);
   const float iscale = 1.0 / (float) XSIZE, jscale = yfac / (float) YSIZE;
@@ -95,11 +96,11 @@ update_grid (void)
   pos[19][15] = fsin (rot1) / 2;
   pos[33][47] = fsin (rot2) / 3;
   
-  rot1 += 0.07;
+  rot1 += 0.1 * amp;
   if (rot1 > 2 * M_PI)
     rot1 -= 2 * M_PI;
 
-  rot2 += 0.08;
+  rot2 += 0.05 * amp;
   if (rot2 > 2 * M_PI)
     rot2 -= 2 * M_PI;
 
@@ -274,7 +275,7 @@ preinit_water (void)
 {
   water = allocate_water (XSIZE, YSIZE);
 
-#if 0
+#if 1
   highlight = pvr_mem_malloc (256 * 256);
   fakephong_highlight_texture (highlight, 256, 256, 50.0f);
 
@@ -284,7 +285,7 @@ preinit_water (void)
   f_phong.intensity = 255;
   
   water->fake_phong = &f_phong;
-#elif 1
+#elif 0
 /*
   kmg_to_img ("/rd/sky21.kmg", &front_txr);
   texaddr = pvr_mem_malloc (front_txr.byte_count);
@@ -317,7 +318,7 @@ preinit_water (void)
 
   object_set_ambient (water, 0, 0, 64);
   object_set_pigment (water, 0, 0, 255);
-  object_set_clipping (water, 1);
+  object_set_clipping (water, 0);
   
   obj_orient.modelview = &mview;
   obj_orient.normal_xform = &normxform;
@@ -330,46 +331,38 @@ init_water (void *params)
 }
 
 static void
-render_water (uint32_t time_offset, void *params, int iparam, viewpoint *view,
-	      lighting *lights, int pass)
+prepare_frame (uint32_t time_offset, void *params, int iparam, viewpoint *view,
+	       lighting *lights)
 {
-  if (pass == 0)
-    {
-      update_grid ();
-      update_strips (water, 1);
-    }
-  
-  view->eye_pos[0] = -0.866;
-  view->eye_pos[1] = 0.75;
-  view->eye_pos[2] = -0.5;
+  update_grid ();
+  update_grid ();
+  update_strips (water, 1);
+
+  light_set_active (lights, 1);
+  light_set_pos (lights, 0, 0, 5, 0);
 
   glKosMatrixDirty ();
 
-  glMatrixMode (GL_MODELVIEW);
-  glLoadIdentity ();
-	     /* Eye position.  */
-  gluLookAt (view->eye_pos[0], view->eye_pos[1], view->eye_pos[2],
-	     /* Centre.  */
-	     0.866, 0.5,   0.5,
-	     /* Up.  */
-	     0.0,   1.0,   0.0);
+  /*view_set_look_at (view, 0.866, 0.5, 0.5);
+  view_set_up_dir (view, 0.0, 1.0, 0.0);*/
+}
 
-  glGetFloatv (GL_MODELVIEW_MATRIX, &(*view->camera)[0][0]);
-  vec_transpose_rotation (&(*view->inv_camera_orientation)[0][0],
-			  &(*view->camera)[0][0]);
-  vec_transform3_fipr (&lights->light0_pos_xform[0], &(*view->camera)[0][0],
-		       &lights->light0_pos[0]);
-  vec_transform3_fipr (&lights->light0_up_xform[0], &(*view->camera)[0][0],
-		       &lights->light0_up[0]);
-
+static void
+render_water (uint32_t time_offset, void *params, int iparam, viewpoint *view,
+	      lighting *lights, int pass)
+{
+  glPushMatrix ();
+  glTranslatef (0, -2, 0);
   glGetFloatv (GL_MODELVIEW_MATRIX, &mview[0][0]);
   vec_normal_from_modelview (&normxform[0][0], &mview[0][0]);
   object_render_immediate (view, water, &obj_orient, lights, pass);
+  glPopMatrix ();
 }
 
 effect_methods wave_methods = {
   .preinit_assets = &preinit_water,
   .init_effect = &init_water,
+  .prepare_frame = &prepare_frame,
   .display_effect = &render_water,
   .uninit_effect = NULL
 };

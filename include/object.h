@@ -8,6 +8,9 @@
 #include "envmap_dual_para.h"
 #include "bumpmap.h"
 #include "vertex_fog.h"
+#include "viewpoint.h"
+#include "lighting.h"
+#include "colour.h"
 
 typedef float vector[3];
 
@@ -48,14 +51,6 @@ typedef struct strip
   struct strip *next;
 } strip;
 
-typedef struct colour
-{
-  unsigned char r;
-  unsigned char g;
-  unsigned char b;
-  unsigned char a;
-} colour;
-
 typedef struct object
 {
   strip *striplist;
@@ -69,8 +64,8 @@ typedef struct object
   /* Cached max. length of strip.  */
   int max_strip_length;
   
-  /* Plain textured, no lighting or fancy stuff.  */
-  int plain_textured;
+  /* Poly is textured.  */
+  int textured;
   
   /* Render object with specular highlight if non-NULL.  */
   fakephong_info *fake_phong;
@@ -85,28 +80,12 @@ typedef struct object
   vertexfog_info *vertex_fog;
 } object;
 
-typedef struct viewpoint
-{
-  matrix_t *projection;
-  matrix_t *camera;
-  matrix_t *inv_camera_orientation;
-  float eye_pos[3];
-  float near;
-} viewpoint;
-
 typedef struct object_orientation
 {
   matrix_t *modelview;
   matrix_t *normal_xform;
+  int dirty;
 } object_orientation;
-
-typedef struct lighting
-{
-  float light0_pos[3];
-  float light0_up[3];
-  float light0_pos_xform[3];
-  float light0_up_xform[3];
-} lighting;
 
 extern object *object_create_default (strip *strips);
 extern void object_set_ambient (object *obj, int r, int g, int b);

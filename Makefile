@@ -1,6 +1,6 @@
 
 	CC =		kos-cc
-	CFLAGS =	-O3 -fomit-frame-pointer
+	CFLAGS =	-O2
 	INCLUDE =	-Iinclude
 	STRIP =		kos-strip
 	DEPFLAGS =	-DDREAMCAST_KOS -D_arch_dreamcast
@@ -22,7 +22,8 @@
 			libcompass/perlin.c libcompass/perlin-3d.c \
 			libcompass/loader.c libcompass/geosphere.c \
 			libcompass/skybox.c libcompass/torus.c \
-			libcompass/tube.c libcompass/cube.c
+			libcompass/tube.c libcompass/cube.c \
+			libcompass/lighting.c libcompass/viewpoint.c
 
 	COMPASS_OBJ =	libcompass/fakephong.o libcompass/envmap_dual_para.o \
 			libcompass/bump_map.o libcompass/object.o \
@@ -30,7 +31,8 @@
 			libcompass/perlin.o libcompass/perlin-3d.o \
 			libcompass/loader.o libcompass/geosphere.o \
 			libcompass/skybox.o libcompass/torus.o \
-			libcompass/tube.o libcompass/cube.o
+			libcompass/tube.o libcompass/cube.o \
+			libcompass/lighting.o libcompass/viewpoint.o
 
 	LIBCOMPASS =	libcompass/libcompass.a
 
@@ -74,7 +76,7 @@ romdisk.d:
 	$(CC) $(CFLAGS) $(INCLUDE) -DDREAMCAST_KOS -c $< -o $@
 
 %.d:    %.c
-	$(CC) $(CFLAGS) $(INCLUDE) -MM $< > $@
+	$(CC) $(CFLAGS) $(INCLUDE) -MM $< | ./dirify.sh "$@" > $@
 
 .depend:	Makefile.dc $(SRC)
 	$(KOS_CC) $(DEPFLAGS) $(INCLUDE) -MM $(SRC) > .depend

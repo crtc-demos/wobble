@@ -45,16 +45,16 @@ init_foggy_tube (void *params)
   obj_orient.modelview = &mview;
   obj_orient.normal_xform = &normxform;
   object_set_clipping (tube, 1);
-  object_set_ambient (tube, 0.1, 0.1, 0.1);
-  object_set_pigment (tube, 0.8, 0.8, 0.5);
+  object_set_ambient (tube, 32, 32, 32);
+  object_set_pigment (tube, 224, 224, 224);
   
   vert_fog.fogging = &fogging_fn;
   
-  // tube->vertex_fog = &vert_fog;
-  tube->plain_textured = 1;
+  //tube->vertex_fog = &vert_fog;
+  tube->textured = 1;
 
- /* png_load_texture ("/rd/white.png", &vert_fog.texture, PNG_NO_ALPHA,
-		    &vert_fog.w, &vert_fog.h);*/
+  png_load_texture ("/rd/white.png", &vert_fog.texture, PNG_NO_ALPHA,
+		    &vert_fog.w, &vert_fog.h);
 
   {
     kos_img_t tube_txr;
@@ -85,6 +85,9 @@ prepare_frame (uint32_t time_offset, void *params, int iparam, viewpoint *view,
   fill_tube_data (tube, ROWS, SEGMENTS, (float) time_offset / 1000.0);
   glMatrixMode (GL_MODELVIEW);
 
+  light_set_active (lights, 1);
+  light_set_pos (lights, 0, 0.0, 2.0, -4.0);
+
   amt += 0.01;
 }
 
@@ -97,6 +100,7 @@ render_tubes (uint32_t time_offset, void *params, int iparam,
   for (i = 0; i < 4; i++)
     {
       float amt = ((float) time_offset / 1000.0f) - 5;
+      glKosMatrixDirty ();
       glPushMatrix ();
       glTranslatef (2.0 * (i - 1.5) - amt, 0, 4 + 2.0 * i - amt);
       glGetFloatv (GL_MODELVIEW_MATRIX, &mview[0][0]);

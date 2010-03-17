@@ -1,5 +1,6 @@
-#include "object.h"
 #include "envmap_dual_para.h"
+#include "object.h"
+#include "vector.h"
 
 /* X_VERTEX is a vertex transformed by the modelview matrix.  X_NORMAL is a
    vertex transformed by the normal matrix (transpose-inverse of rotation part

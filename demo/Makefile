@@ -1,6 +1,6 @@
 
 	CC =		kos-cc
-	CFLAGS =	-O3
+	CFLAGS =	-O2
 	INCLUDE =	-I../include
 	STRIP =		kos-strip
 	DEPFLAGS =	-DDREAMCAST_KOS -D_arch_dreamcast
@@ -29,7 +29,7 @@ run:	$(TARGET)
 	/usr/local/bin/dc-tool -x $(TARGET)
 
 $(TARGET):	$(OBJS)
-	$(KOS_CC) $(KOS_CFLAGS) $(KOS_LDFLAGS) -o $(TARGET) $(KOS_START) $(OBJS) -L../libcompass -lgl -lpng -lkmg -lz -lcompass -lkosutils -lm $(KOS_LIBS)
+	$(KOS_CC) $(KOS_CFLAGS) $(KOS_LDFLAGS) -o $(TARGET) $(KOS_START) $(OBJS) -L../libcompass -lgl -lpng -ljpeg -lkmg -lz -lcompass -lkosutils -lm $(KOS_LIBS)
 	$(STRIP) $(TARGET)
 
 .PHONY: $(ROMDISK)
@@ -39,7 +39,7 @@ $(ROMDISK): imagedir_clean
 .PHONY: imagedir_clean
 imagedir_clean:
 	rm -rf imagedir_clean
-	rsync -Pav --exclude='.svn' imagedir/ imagedir_clean
+	rsync --partial -a --exclude='.svn' imagedir/ imagedir_clean
 
 romdisk.o:	$(ROMDISK)
 	$(KOS_BASE)/utils/bin2o/bin2o romdisk.img romdisk romdisk.o
