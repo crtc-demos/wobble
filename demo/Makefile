@@ -8,14 +8,16 @@
 
 	OBJS =		draw_torus.o voronoi.o wobble_tube.o waves.o fire.o \
 			bumpy_cubes.o foggy_tubes.o zoomy_duck.o cam_path.o \
-			building.o duck_fountain.o sky_box.o timing.o romdisk.o
+			building.o duck_fountain.o sky_box.o shiny_thing.o \
+			smokelife.o timing.o romdisk.o
 	ROMDISK =	romdisk.img
 
 	TARGET =	demo.elf
 
 	SRC =		draw_torus.c voronoi.c wobble_tube.c waves.c fire.c \
 			bumpy_cubes.c foggy_tubes.c zoomy_duck.c cam_path.c \
-			building.c duck_fountain.c sky_box.c timing.c
+			building.c duck_fountain.c sky_box.c shiny_thing.c \
+			smokelife.c timing.c
 
 .PHONY:	.depend
 

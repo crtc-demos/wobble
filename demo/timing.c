@@ -39,13 +39,15 @@
 #include "building.h"
 #include "duck_fountain.h"
 #include "sky_box.h"
+#include "shiny_thing.h"
+#include "smokelife.h"
 
 #define PLAY_AUDIO
 #undef HOLD
 #undef DEBUG
 
 #undef SKIP_TO_TIME
-//#define SKIP_TO_TIME 110000
+//#define SKIP_TO_TIME 56000
 
 #ifdef SKIP_TO_TIME
 uint64_t offset_time = 0;
@@ -127,9 +129,9 @@ static do_thing_at sequence[] = {
   { 37500, 39500, &voronoi_methods, NULL, 2, 0 },
   { 39500, 41500, &voronoi_methods, NULL, 3, 0 },
 
-  { 41500, 58000, &wobble_tube_methods, NULL, 0, 1 },
-  { 41500, 58000, &skybox_methods, NULL, 0, 0 },
-  { 41500, 58000, &cam_path_methods, &wobble_tube_path, 54000, 0 },
+  { 41500, 57950, &wobble_tube_methods, NULL, 0, 1 },
+  { 41500, 57950, &skybox_methods, NULL, 0, 0 },
+  { 41500, 57950, &cam_path_methods, &wobble_tube_path, 54000, 0 },
   
   { 58000, 60000, &zoomy_duck_methods, NULL, 0, 0 },
 
@@ -138,16 +140,32 @@ static do_thing_at sequence[] = {
 
   { 64500, 66500, &zoomy_duck_methods, NULL, 0, 1 },
 
-  { 66500, 125000, &wave_methods, NULL, 0, 1 },
-  { 66500, 125000, &building_methods, NULL, 0, 0 },
-  { 66500, 125000, &cam_path_methods, &waves_camera_path, 0, 0 },
-  { 66500, 125000, &skybox_methods, NULL, 0, 1 },
+  { 66500, 69450, &smokelife_methods, NULL, 0, 1 },
+
+  { 69500, 90000, &wave_methods, NULL, 0, 0 },
+  { 69500, 90000, &building_methods, NULL, 0, 0 },
+  { 69500, 90000, &cam_path_methods, &waves_camera_path, 0, 0 },
+  { 69500, 125000, &skybox_methods, NULL, 0, 1 },
+
+  { 90000, 100000, &shiny_thing_methods, NULL, 0, 1 },
+  
+  /* skybox still active...  */
+  { 100000, 125000, &wave_methods, NULL, 0, 1 },
+  { 100000, 125000, &building_methods, NULL, 0, 0 },
+  { 100000, 125000, &cam_path_methods, &waves_camera_path, 35000, 0 },
 
   /* Only use the fire once...  */
   { 125500, 160000, &fire_methods, NULL, 0, 1 },
   { 135500, 150000, &bumpy_cube_methods, NULL, 0, 0 },
 
   { 160000, 180000, &duck_fountain_methods, NULL, 0, 0 }
+
+#elif 0
+  { 0, 300000, &smokelife_methods, NULL, 0, 0 }
+
+#elif 0
+  { 0, 300000, &skybox_methods, NULL, 0, 0 },
+  { 0, 300000, &shiny_thing_methods, NULL, 0, 0 }
 
 #elif 0
 

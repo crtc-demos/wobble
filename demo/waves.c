@@ -277,6 +277,11 @@ static object_orientation obj_orient;
 static void
 preinit_water (void)
 {
+  static int initialised = 0;
+  
+  if (initialised)
+    return;
+  
   water = allocate_water (XSIZE, YSIZE);
 
 #if 1
@@ -326,6 +331,10 @@ preinit_water (void)
   
   obj_orient.modelview = &mview;
   obj_orient.normal_xform = &normxform;
+
+  init_grid ();
+
+  initialised = 1;
 }
 
 static void
@@ -337,7 +346,6 @@ finalize_water (void *params)
 static void
 init_water (void *params)
 {
-  init_grid ();
 }
 
 static void

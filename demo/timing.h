@@ -1,6 +1,8 @@
 #ifndef TIMING_H
 #define TIMING_H 1
 
+#include "object.h"
+
 #include <stdint.h>
 
 typedef struct {
