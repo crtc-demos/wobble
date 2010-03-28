@@ -25,12 +25,12 @@ static matrix_t normxform2 __attribute__((aligned(32)));
 
 static float rot1 = 0.0, rot2 = 0.0, rot3 = 0.0;
 static object *cube;
-bumpmap_info bumpinfo;
+static bumpmap_info bumpinfo;
+static pvr_ptr_t bumptxr;
 
 static void
 preinit_bumpy_cubes (void)
 {
-  pvr_ptr_t bumptxr;
   int initialised = 0;
   
   if (initialised)
@@ -38,9 +38,6 @@ preinit_bumpy_cubes (void)
 
   cube = cube_create (1.0);
 
-  bumptxr = bumpmap_load_raw ("/rd/bump.raw", 128, 128);
-  object_set_all_textures (cube, bumptxr, 128, 128,
-			   PVR_TXRFMT_BUMP | PVR_TXRFMT_TWIDDLED);
   bumpmap_auto_uv_orient (cube);
   
   object_set_ambient (cube, 0.2, 0.1, 0.0);
@@ -60,11 +57,28 @@ preinit_bumpy_cubes (void)
 }
 
 static void
+init_bumps (void *params)
+{
+  bumptxr = bumpmap_load_raw ("/rd/bump.raw", 128, 128);
+  object_set_all_textures (cube, bumptxr, 128, 128,
+			   PVR_TXRFMT_BUMP | PVR_TXRFMT_TWIDDLED);
+}
+
+static void
+uninit_bumps (void *params)
+{
+  pvr_mem_free (bumptxr);
+}
+
+static void
 prepare_frame (uint32_t time_offset, void *params, int iparam, viewpoint *view,
 	       lighting *lights)
 {
   float rot2_rad = rot2 * M_PI / 180.0f;
   float radius = 3.0f;
+
+  view_set_eye_pos (view, 0, 0, -4.5);
+  view_set_look_at (view, 0, 0, 0);
 
   light_set_pos (lights, 0, 0.0, 0.0, 4.0);
 
@@ -115,8 +129,9 @@ render_bumpy_cubes (uint32_t time_offset, void *params, int iparam,
 
 effect_methods bumpy_cube_methods = {
   .preinit_assets = &preinit_bumpy_cubes,
-  .init_effect = NULL,
+  .init_effect = &init_bumps,
   .prepare_frame = &prepare_frame,
   .display_effect = &render_bumpy_cubes,
-  .uninit_effect = NULL
+  .uninit_effect = &uninit_bumps,
+  .finalize = NULL
 };

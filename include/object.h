@@ -96,7 +96,19 @@ extern void object_set_all_textures (object *obj, pvr_ptr_t txr,
 				     unsigned int format);
 extern void object_render_immediate (viewpoint *view, object *,
 				     object_orientation *, lighting *, int);
+extern void object_render_untextured_phong (viewpoint *view, object *,
+					    object_orientation *, lighting *,
+					    int);
+extern void object_render_deferred (viewpoint *view, object *,
+				    object_orientation *, lighting *);
 extern strip *strip_cons (strip *prev, unsigned int length,
 			  unsigned int alloc_bits);
+
+#undef USE_DMA
+
+/* This has no business being here... */
+#ifndef ARRAY_LENGTH
+#define ARRAY_LENGTH(X) (sizeof (X) / sizeof (X[0]))
+#endif
 
 #endif

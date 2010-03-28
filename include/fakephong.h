@@ -36,4 +36,7 @@ extern void lightsource_fake_phong (float *, float *, const float *,
 extern int fakephong_classify_triangle (float[3][3], int,
 					struct vertex_attrs *);
 
+extern int fakephong_classify_triangle_1pass (float[3][3], int,
+					      struct vertex_attrs *);
+
 #endif

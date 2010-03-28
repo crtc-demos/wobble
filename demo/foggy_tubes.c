@@ -2,6 +2,7 @@
 
 #include <kos.h>
 #include <png/png.h>
+#include <kmg/kmg.h>
 
 #include "vector.h"
 #include "object.h"

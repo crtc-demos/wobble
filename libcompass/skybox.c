@@ -18,7 +18,7 @@
 
 object *
 create_skybox (float radius, pvr_ptr_t textures[6], unsigned int xsize,
-	       unsigned int ysize)
+	       unsigned int ysize, unsigned int format)
 {
   strip *newstrip = NULL;
   object *newobj = NULL;
@@ -68,7 +68,7 @@ create_skybox (float radius, pvr_ptr_t textures[6], unsigned int xsize,
       newstrip->s_attrs->xsize = xsize;
       newstrip->s_attrs->ysize = ysize;
       /* Not very flexible!  */
-      newstrip->s_attrs->txr_fmt = PVR_TXRFMT_RGB565 | PVR_TXRFMT_TWIDDLED;
+      newstrip->s_attrs->txr_fmt = format; // PVR_TXRFMT_RGB565 | PVR_TXRFMT_TWIDDLED;
       newstrip->inverse = 1;
     }
 

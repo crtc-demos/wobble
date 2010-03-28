@@ -17,6 +17,7 @@ static float hash(int x, int y, int z)
 
 */
 
+#if 0
 static float smooth(int x, int y)
 {
 /*  return ((hash(x-1, y-1) + hash(x+1, y-1) + hash(x-1, y+1) + hash(x+1, y+1)) +
@@ -24,6 +25,7 @@ static float smooth(int x, int y)
            hash(x,y)*4.0)/16.0;*/
   return hash(x,y, 0);
 }
+#endif
 
 static float cubic(float v0, float v1, float v2, float v3, float x)
 {

@@ -19,6 +19,9 @@
    (Otherwise, for DMA-based rendering, output two copies of transformed
    vertices, for e.g. opaque and transparent polys, so we don't do all the
    calculations twice.)
+   
+   Update: the above is probably all nonsense; DMA-based rendering seems a
+   little slower than direct.
 */
 
 #include <kos.h>
@@ -328,9 +331,6 @@ typedef struct {
   uint32 d1, d2, d3, d4, d5, d6;
 } pvr_vertex_type17_t;
 
-#define ALPHA_LIST PVR_LIST_TR_POLY
-//#define ALPHA_LIST PVR_LIST_PT_POLY
-
 typedef struct mem_pool {
   char *buffer;
   unsigned int used;
@@ -433,7 +433,162 @@ triangle_clipping_classifier (float tri[3][3], int clockwise,
     return 1;
 }
 
-#if 1
+static strip *
+do_clipping (viewpoint *view, strip *transformed_strip)
+{
+  strip *strip_starts[2] = { 0, 0 };
+  strip *strip_ends[2] = { 0, 0 };
+  strip *cstr;
+  strip *clipped_output;
+  unsigned int alloc_mask = 0, i;
+
+#ifdef DEBUG
+  printf ("(clipping)\n");
+#endif
+
+  /* A sneaky global!  Used by triangle_clipping_classifier.  */
+  near_plane = view->near;
+
+  /* Split strips into 0 (fully visible) or 1 (partly visible,
+     clipped).  Drop fully invisible triangles/strips on the floor.  */
+  restrip_list (transformed_strip, triangle_clipping_classifier,
+		strip_starts, strip_ends, pool_alloc);
+
+  /* Glue clipped strips onto the start of the fully-visible strip
+     list.  */
+  clipped_output = strip_starts[0];
+
+  for (cstr = strip_starts[1]; cstr; cstr = cstr->next)
+    {
+      if (cstr->length < 3)
+	continue;
+
+      alloc_mask = cstr->start ? ALLOC_GEOMETRY : 0;
+      alloc_mask |= cstr->normals ? ALLOC_NORMALS : 0;
+      alloc_mask |= cstr->texcoords ? ALLOC_TEXCOORDS : 0;
+      alloc_mask |= cstr->v_attrs ? ALLOC_VERTEXATTRS : 0;
+
+      for (i = 0; i < cstr->length - 2; i++)
+	{
+	  int visible_points, output_length;
+	  int pt_visible[3];
+	  unsigned int j, outidx = 0;
+	  float points[4][3], normals[4][3], texcs[4][2];
+
+	  pt_visible[0] = (*cstr->start)[i][2] < view->near;
+	  pt_visible[1] = (*cstr->start)[i + 1][2] < view->near;
+	  pt_visible[2] = (*cstr->start)[i + 2][2] < view->near;
+
+	  visible_points = pt_visible[0] + pt_visible[1]
+			   + pt_visible[2];
+
+	  if (visible_points == 1)
+	    output_length = 3;
+	  else if (visible_points == 2)
+	    output_length = 4;
+	  else
+	    abort ();
+
+	  clipped_output = strip_cons_pool (clipped_output,
+	    output_length, alloc_mask);
+
+	  clipped_output->inverse = cstr->inverse ^ (i & 1);
+	  clipped_output->s_attrs = cstr->s_attrs;
+
+	  for (j = 0; j < 3; j++)
+	    {
+	      unsigned int next = (j == 2) ? 0 : j + 1;
+
+	      if (pt_visible[j])
+		{
+		  memcpy (&points[outidx][0], &(*cstr->start)[i + j][0],
+			  3 * sizeof (float));
+		  if (cstr->normals)
+		    memcpy (&normals[outidx][0],
+			    &(*cstr->normals)[i + j][0],
+			    3 * sizeof (float));
+		  if (cstr->texcoords)
+		    memcpy (&texcs[outidx][0],
+			    &(*cstr->texcoords)[i + j][0],
+			    2 * sizeof (float));
+		  outidx++;
+		}
+
+	      if ((pt_visible[j] && !pt_visible[next])
+		  || (!pt_visible[j] && pt_visible[next]))
+		{
+		  /* Interpolate and be damned!  */
+		  float param
+		    = (view->near - (*cstr->start)[i + j][2])
+		      / ((*cstr->start)[i + next][2]
+			 - (*cstr->start)[i + j][2]);
+
+		  vec_interpolate (&points[outidx][0],
+				   &(*cstr->start)[i + j][0],
+				   &(*cstr->start)[i + next][0], param);
+		  if (cstr->normals)
+		    vec_interpolate (&normals[outidx][0],
+				     &(*cstr->normals)[i + j][0],
+				     &(*cstr->normals)[i + next][0],
+				     param);
+		  if (cstr->texcoords)
+		    vec_interpolate2 (&texcs[outidx][0],
+				      &(*cstr->texcoords)[i + j][0],
+				      &(*cstr->texcoords)[i + next][0],
+				      param);
+		  outidx++;
+		}
+	    }
+
+	  assert (outidx == output_length);
+
+	  switch (outidx)
+	    {
+	    case 3:
+	      /* Easy case: we have a single triangle, in the same
+		 order as the original strip.  */
+	      memcpy (&(*clipped_output->start)[0][0],
+		      points, 3 * 3 * sizeof (float));
+	      if (clipped_output->normals)
+		memcpy (&(*clipped_output->normals)[0][0],
+			normals, 3 * 3 * sizeof (float));
+	      if (clipped_output->texcoords)
+		memcpy (&(*clipped_output->texcoords)[0][0],
+			texcs, 3 * 2 * sizeof (float));
+	      break;
+
+	    case 4:
+	      /* We have four points going round a circle.  Need to
+		 make them zig-zag in the normal strip style
+		 instead.  */
+	      {
+		unsigned int order[] = {0, 1, 3, 2};
+
+		for (j = 0; j < 4; j++)
+		  {
+		    memcpy (&(*clipped_output->start)[j][0],
+			    &points[order[j]][0], 3 * sizeof (float));
+		    if (clipped_output->normals)
+		      memcpy (&(*clipped_output->normals)[j][0],
+			      &normals[order[j]][0],
+			      3 * sizeof (float));
+		    if (clipped_output->texcoords)
+		      memcpy (&(*clipped_output->texcoords)[j][0],
+			      &texcs[order[j]][0], 2 * sizeof (float));
+		  }
+	      }
+	      break;
+
+	    default:
+	      abort ();
+	    }
+	}
+    }
+
+  return clipped_output;
+}
+
+#if 0
 #define PREFETCH(X)
 #else
 #define PREFETCH(X) __asm__ __volatile__ ("pref @%0" : : "r" (X))
@@ -443,13 +598,821 @@ triangle_clipping_classifier (float tri[3][3], int clockwise,
 /* NORMAL_XFORM is the transpose-inverse of the rotation part of the MODELVIEW
    matrix.  */
 
-/* This is horribly misorganised, but it's only meant to be a prototype.
-   Needs fixing!  */
-
 void
 object_render_immediate (viewpoint *view, object *obj,
 			 object_orientation *obj_orient, lighting *lights,
 			 int pass)
+{
+  unsigned int strip_max = max_strip_length (obj), i;
+  float (*trans)[][3], (*trans_norm)[][3];
+  strip *str;
+  float c_eyepos[3];
+  vertex_attrs *attr_buf;
+    
+  pool_clear ();
+  
+  attr_buf = pool_alloc (sizeof (vertex_attrs) * strip_max);
+  
+  if (obj->env_map)
+    {
+      if (pass != PVR_LIST_OP_POLY && pass != PVR_LIST_PT_POLY)
+        return;
+
+      vec_transform3_fipr (&c_eyepos[0], (float *) view->camera,
+			   &view->eye_pos[0]);
+    }
+
+  trans = pool_alloc (sizeof (float) * 3 * strip_max);
+  trans_norm = pool_alloc (sizeof (float) * 3 * strip_max);
+
+  for (str = obj->striplist; str; str = str->next)
+    {
+      strip transformed_strip;
+      strip *use_strip;
+
+      mat_load (obj_orient->modelview);
+
+#ifdef DEBUG
+      printf ("transform points\n");
+#endif
+
+      for (i = 0; i < str->length; i++)
+        {
+	  float *vec, *outvec;
+	  float x, y, z, w = 1.0;
+	  
+	  vec = &(*str->start)[i][0];
+	  PREFETCH (&vec[5]);
+	  outvec = &(*trans)[i][0];
+	  
+	  x = vec[0];
+	  y = vec[1];
+	  z = vec[2];
+	  mat_trans_nodiv (x, y, z, w);
+	  outvec[0] = x;
+	  outvec[1] = y;
+	  outvec[2] = z;
+	}
+
+#ifdef DEBUG
+      printf ("transform normals\n");
+#endif
+
+      if (str->normals)
+        {
+	  mat_load (obj_orient->normal_xform);
+
+	  for (i = 0; i < str->length; i++)
+            {
+	      float *norm, *outnorm;
+	      float x, y, z, w = 1.0;
+
+	      norm = &(*str->normals)[i][0];
+	      PREFETCH (&norm[5]);
+	      outnorm = &(*trans_norm)[i][0];
+	      
+	      x = norm[0];
+	      y = norm[1];
+	      z = norm[2];
+	      mat_trans_nodiv (x, y, z, w);
+	      outnorm[0] = x;
+	      outnorm[1] = y;
+	      outnorm[2] = z;
+	    }
+	}
+
+      transformed_strip.start = trans;
+      transformed_strip.length = str->length;
+      if (str->normals)
+	transformed_strip.normals = trans_norm;
+      else
+        transformed_strip.normals = NULL;
+      transformed_strip.texcoords = str->texcoords;
+      transformed_strip.inverse = str->inverse;
+      transformed_strip.v_attrs = attr_buf;
+      transformed_strip.s_attrs = str->s_attrs;
+      transformed_strip.next = NULL;
+
+#ifdef DEBUG
+      printf ("before clip loop\n");
+#endif
+
+      if (obj->clip)
+        use_strip = do_clipping (view, &transformed_strip);
+      else
+        use_strip = &transformed_strip;
+
+#ifdef DEBUG
+      printf ("use_strip now %p\n", use_strip);
+#endif
+
+      if (!use_strip)
+        continue;
+
+#ifdef DEBUG
+      printf ("use_strip now %p (2)\n", use_strip);
+#endif
+
+      if (obj->env_map && (pass == PVR_LIST_OP_POLY
+			   || pass == PVR_LIST_PT_POLY))
+        {
+	  /* Dual-paraboloid environment mapping.  */
+	  strip *strip_starts[3] = { 0, 0, 0 };
+	  strip *strip_ends[3] = { 0, 0, 0 };
+	  pvr_poly_cxt_t cxt;
+	  pvr_poly_hdr_t hdr;
+	  strip *str_out, *iter;
+	  pvr_vertex_t vert;
+	  int class = 0;
+
+	  vert.argb = PVR_PACK_COLOR (1.0f, 1.0f, 1.0f, 1.0f);
+	  vert.oargb = 0;
+
+	  for (iter = use_strip; iter; iter = iter->next)
+	    for (i = 0; i < iter->length; i++)
+	      envmap_dual_para_texcoords
+		(&iter->v_attrs[i].env_map.texc_f[0],
+		 &iter->v_attrs[i].env_map.texc_b[0],
+		 (*iter->start)[i], (*iter->normals)[i],
+		 &c_eyepos[0], *(view->inv_camera_orientation));
+
+	  restrip_list (use_strip, envmap_classify_triangle,
+			strip_starts, strip_ends, pool_alloc);
+
+	  mat_load (view->projection);
+
+	  /* This way of doing things wastes a lot of time here (due to
+	     recalculation of above), and it's not really necessary.  Only
+	     temporary until we get DMA working.  */
+
+          if (pass == PVR_LIST_OP_POLY)
+	    {
+	      /* Render front strips.  */
+	      pvr_poly_cxt_txr (&cxt, PVR_LIST_OP_POLY,
+				obj->env_map->front_txr_fmt,
+				obj->env_map->xsize, obj->env_map->ysize,
+				obj->env_map->front_txr, PVR_FILTER_BILINEAR);
+
+	      pvr_poly_compile (&hdr, &cxt);
+
+	      pvr_prim (&hdr, sizeof (hdr));
+	      
+	      /* Render both front and front-and-back strips (class 0 and
+	         2).  */
+	      for (class = 0; class <= 2; class += 2)
+		for (str_out = strip_starts[class]; str_out;
+		     str_out = str_out->next)
+	          {
+		    if (str_out->length < 3)
+		      continue;
+
+		    for (i = 0; i < str_out->length; i++)
+		      {
+			float *invec = &(*str_out->start)[i][0];
+			float x, y, z;
+			int last = (i == str_out->length - 1);
+
+			x = invec[0];
+			y = invec[1];
+			z = invec[2];
+			mat_trans_single (x, y, z);
+			
+			vert.flags = (last) ? PVR_CMD_VERTEX_EOL
+					    : PVR_CMD_VERTEX;
+			vert.x = x;
+			vert.y = y;
+			vert.z = z;
+			vert.u = str_out->v_attrs[i].env_map.texc_f[0];
+			vert.v = str_out->v_attrs[i].env_map.texc_f[1];
+			pvr_prim (&vert, sizeof (vert));
+			if (i == 0 && str_out->inverse)
+		          pvr_prim (&vert, sizeof (vert));
+		      }
+		    //printf ("strip %p, str_out %p, sent %d\n", str,
+			//    str_out, i);
+		  }
+
+	      pvr_poly_cxt_txr (&cxt, PVR_LIST_OP_POLY,
+				obj->env_map->back_txr_fmt,
+				obj->env_map->xsize, obj->env_map->ysize,
+				obj->env_map->back_txr, PVR_FILTER_BILINEAR);
+			
+	      /* Render back-only strips.  */
+	      class = 1;
+	    }
+	  else if (pass == PVR_LIST_PT_POLY)
+	    {
+	      pvr_poly_cxt_txr (&cxt, PVR_LIST_PT_POLY,
+	      			obj->env_map->back_txr_fmt, obj->env_map->xsize,
+				obj->env_map->ysize, obj->env_map->back_txr,
+				PVR_FILTER_BILINEAR);
+	      cxt.txr.uv_clamp = PVR_UVCLAMP_UV;
+	      cxt.blend.src = PVR_BLEND_SRCALPHA;
+	      cxt.blend.dst = PVR_BLEND_INVSRCALPHA;
+	      cxt.txr.env = PVR_TXRENV_MODULATE;
+	      cxt.depth.comparison = PVR_DEPTHCMP_GEQUAL;
+	      /* Render front-and-back strips (back part, with alpha).  */
+	      class = 2;
+	    }
+
+	  pvr_poly_compile (&hdr, &cxt);
+
+	  for (str_out = strip_starts[class]; str_out; str_out = str_out->next)
+	    {
+	      if (str_out->length < 3)
+		continue;
+
+	      pvr_prim (&hdr, sizeof (hdr));
+
+	      for (i = 0; i < str_out->length; i++)
+		{
+		  float *invec = &(*str_out->start)[i][0];
+		  float x, y, z;
+		  int last = (i == str_out->length - 1);
+
+		  x = invec[0];
+		  y = invec[1];
+		  z = invec[2];
+		  mat_trans_single (x, y, z);
+
+		  vert.flags = (last) ? PVR_CMD_VERTEX_EOL
+				      : PVR_CMD_VERTEX;
+		  vert.x = x;
+		  vert.y = y;
+		  vert.z = z;
+		  vert.u = str_out->v_attrs[i].env_map.texc_b[0];
+		  vert.v = str_out->v_attrs[i].env_map.texc_b[1];
+		  pvr_prim (&vert, sizeof (vert));
+		  if (i == 0 && str_out->inverse)
+		    pvr_prim (&vert, sizeof (vert));
+		}
+	    }
+	  continue;
+	}
+
+      /* First pass for bump mapping, fake phong -- for now, plain
+         gouraud-shaded polygons only.  */
+      if (pass == PVR_LIST_OP_POLY && !obj->env_map)
+        {
+	  /* First pass, dot-product lighting.  */
+	  pvr_poly_cxt_t cxt;
+	  pvr_poly_hdr_t hdr;
+	  pvr_vertex_t vert;
+
+#ifdef DEBUG
+	  printf ("pass 0, not environment mapping\n");
+#endif
+	  
+	  if (obj->textured)
+	    {
+	      pvr_poly_cxt_txr (&cxt, PVR_LIST_OP_POLY,
+		use_strip->s_attrs->txr_fmt, use_strip->s_attrs->xsize,
+		use_strip->s_attrs->ysize, use_strip->s_attrs->texture,
+		PVR_FILTER_BILINEAR);
+	    }
+	  else
+	    pvr_poly_cxt_col (&cxt, PVR_LIST_OP_POLY);
+	  
+	  if (obj->bump_map)
+	    cxt.txr.env = PVR_TXRENV_DECAL;
+	  else
+	    cxt.txr.env = PVR_TXRENV_MODULATE;
+	  
+	  pvr_poly_compile (&hdr, &cxt);
+
+	  pvr_prim (&hdr, sizeof (hdr));
+	  
+	  vert.oargb = 0;
+	  vert.argb = PVR_PACK_COLOR (1.0f, 1.0f, 1.0f, 1.0f);
+
+	  mat_load (view->projection);
+
+	  for (; use_strip; use_strip = use_strip->next)
+	    for (i = 0; i < use_strip->length; i++)
+	      {
+		float *invec = &(*use_strip->start)[i][0];
+		float *texc = NULL;
+		float x, y, z;
+		int last = (i == use_strip->length - 1);
+
+		if (use_strip->texcoords)
+		  texc = &(*use_strip->texcoords)[i][0];
+
+		//PREFETCH (&(*use_strip->start)[i + 2][0]);
+
+		x = invec[0];
+		y = invec[1];
+		z = invec[2];
+		mat_trans_single (x, y, z);
+
+		//PREFETCH (&(*use_strip->normals)[i + 2][0]);
+
+		vert.flags = (last) ? PVR_CMD_VERTEX_EOL : PVR_CMD_VERTEX;
+		if (!obj->bump_map && use_strip->normals && lights->active > 0)
+		  vert.argb = lightsource_diffuse (&(*use_strip->start)[i][0],
+		    &(*use_strip->normals)[i][0], &obj->ambient, &obj->pigment,
+		    &lights->light[0].pos_xform[0]);
+		vert.x = x;
+		vert.y = y;
+		vert.z = z;
+		if (texc)
+		  {
+		    vert.u = texc[0];
+		    vert.v = texc[1];
+		  }
+		else
+		  {
+		    vert.u = 0;
+		    vert.v = 0;
+		  }
+		pvr_prim (&vert, sizeof (vert));
+		if (i == 0 && use_strip->inverse)
+		  pvr_prim (&vert, sizeof (vert));
+	      }
+	}
+
+      /* First pass for vertex fog (experimental).
+         This is wrong.  Fog should be rendered in one pass.  */
+      if (pass == PVR_LIST_TR_POLY && obj->vertex_fog)
+        {
+	  pvr_poly_cxt_t cxt;
+	  pvr_poly_hdr_t hdr;
+	  pvr_vertex_type3_t vert;
+	  strip *iter;
+	  
+	  pvr_poly_cxt_txr (&cxt, PVR_LIST_TR_POLY,
+			    PVR_TXRFMT_RGB565 | PVR_TXRFMT_TWIDDLED,
+			    obj->vertex_fog->w, obj->vertex_fog->h,
+			    obj->vertex_fog->texture, PVR_FILTER_BILINEAR);
+	  
+	  cxt.gen.fog_type = PVR_FOG_VERTEX;
+
+	  /*cxt.blend.src = PVR_BLEND_ONE;
+	  cxt.blend.dst = PVR_BLEND_ZERO;
+	  cxt.txr.env = PVR_TXRENV_MODULATE;
+	  cxt.depth.comparison = PVR_DEPTHCMP_GEQUAL;
+	  */
+	  cxt.gen.specular = 1;
+	  
+	  pvr_poly_compile (&hdr, &cxt);
+
+	  pvr_prim (&hdr, sizeof (hdr));
+	  
+	  //vert.fargb = 0;
+	  vert.argb = PVR_PACK_COLOR (1.0f, 1.0f, 1.0f, 1.0f);
+	  
+	  //pvr_fog_far_depth (1);
+
+	  mat_load (view->projection);
+
+	  for (iter = use_strip; iter; iter = iter->next)
+	    for (i = 0; i < iter->length; i++)
+	      {
+		int last = (i == iter->length - 1);
+		float fogginess;
+		float *invec = &(*iter->start)[i][0];
+		float x, y, z;
+
+		x = invec[0];
+		y = invec[1];
+		z = invec[2];
+		mat_trans_single (x, y, z);
+
+		vert.flags = (last) ? PVR_CMD_VERTEX_EOL : PVR_CMD_VERTEX;
+		vert.argb = lightsource_diffuse (&invec[0],
+			      &(*iter->normals)[i][0], &obj->ambient,
+			      &obj->pigment, &lights->light[0].pos_xform[0]);
+		fogginess = obj->vertex_fog->fogging (x, y, z,
+						      &iter->v_attrs[i]);
+
+		vert.oargb = PVR_PACK_COLOR (fogginess, 0.0, 0.0, 0.0);
+		vert.x = x;
+		vert.y = y;
+		vert.z = z;
+		vert.u = 0;
+		vert.v = 0;
+		pvr_prim (&vert, sizeof (vert));
+		if (i == 0 && iter->inverse)
+		  pvr_prim (&vert, sizeof (vert));
+	      }
+	}
+
+      /* Emit polygons for fake phong highlight.  */
+      if (pass == PVR_LIST_TR_POLY && obj->fake_phong)
+        {
+	  strip *strip_starts[1] = { 0 };
+	  strip *strip_ends[1] = { 0 };
+	  pvr_poly_cxt_t cxt;
+	  pvr_poly_hdr_t hdr;
+	  strip *str_out, *iter;
+	  unsigned int intens = (255 << 24)
+				| (obj->fake_phong->intensity << 16)
+				| (obj->fake_phong->intensity << 8)
+				| obj->fake_phong->intensity;
+
+	  pvr_poly_cxt_txr (&cxt, PVR_LIST_TR_POLY,
+			    PVR_TXRFMT_PAL8BPP | PVR_TXRFMT_TWIDDLED,
+			    obj->fake_phong->xsize, obj->fake_phong->ysize,
+			    obj->fake_phong->highlight, PVR_FILTER_BILINEAR);
+	  	  
+	  cxt.txr.uv_clamp = PVR_UVCLAMP_UV;
+	  cxt.depth.comparison = PVR_DEPTHCMP_GEQUAL;
+	  cxt.blend.src = PVR_BLEND_ONE;
+	  cxt.blend.dst = PVR_BLEND_ONE;
+	  
+	  pvr_poly_compile (&hdr, &cxt);
+	  
+	  /* Note: lightsource_fake_phong destroys xmtrx!  */
+	  for (iter = use_strip; iter; iter = iter->next)
+	    for (i = 0; i < iter->length; i++)
+	      lightsource_fake_phong ((float *) &(*iter->start)[i][0],
+				      (float *) &(*iter->normals)[i][0],
+				      &lights->light[0].pos_xform[0],
+				      &lights->light[0].up_xform[0],
+				      &view->eye_pos[0],
+				      view->inv_camera_orientation,
+				      iter->v_attrs, i);
+
+	  restrip_list (use_strip, fakephong_classify_triangle,
+			strip_starts, strip_ends, pool_alloc);
+
+	  mat_load (view->projection);
+
+	  pvr_prim (&hdr, sizeof (hdr));
+
+	  for (str_out = strip_starts[0]; str_out; str_out = str_out->next)
+            {
+	      unsigned int i;
+	      pvr_vertex_t vert;
+
+              if (str_out->length < 3)
+	        continue;
+
+	      vert.argb = intens;
+	      vert.oargb = 0;
+
+	      for (i = 0; i < str_out->length; i++)
+		{
+		  float *invec = &(*str_out->start)[i][0];
+		  float x, y, z;
+		  int last = (i == str_out->length - 1);
+
+		  //PREFETCH (&(*str_out->start)[i + 2][0]);
+
+		  x = invec[0];
+		  y = invec[1];
+		  z = invec[2];
+		  mat_trans_single (x, y, z);
+
+		  //PREFETCH (&str_out->v_attrs[i + 1].fakephong.texc[0]);
+
+		  vert.flags = (last) ? PVR_CMD_VERTEX_EOL : PVR_CMD_VERTEX;
+		  vert.x = x;
+		  vert.y = y;
+		  vert.z = z;
+		  vert.u = str_out->v_attrs[i].fakephong.texc[0];
+		  vert.v = str_out->v_attrs[i].fakephong.texc[1];
+		  pvr_prim (&vert, sizeof (vert));
+		  if (i == 0 && str_out->inverse)
+		    pvr_prim (&vert, sizeof (vert));
+		}
+	    }
+	}
+
+      /* Bump mapping rendered as second pass.  It just modulates (darkens) the
+         colour already in the buffer, so can't be used for bumpy specular
+	 highlights -- the hardware's not capable of that.  */
+      if (pass == PVR_LIST_TR_POLY && obj->bump_map)
+        {
+	  float x_orient[3];
+	  unsigned int i;
+	  pvr_poly_cxt_t cxt;
+	  pvr_poly_hdr_t hdr;
+	  pvr_vertex_t vert;
+	  float strip_mid[3] = {0, 0, 0}, strip_avgnorm[3] = {0, 0, 0};
+	  float light_incident[3], s_dot_n, t, f[3], d[3];
+	  float d_cross_r[3], dxr_len, d_len, q;
+	  int over_pi, over_2pi;
+
+	  pvr_poly_cxt_txr (&cxt, PVR_LIST_TR_POLY,
+			    PVR_TXRFMT_BUMP | PVR_TXRFMT_TWIDDLED,
+			    use_strip->s_attrs->xsize,
+			    use_strip->s_attrs->ysize,
+			    use_strip->s_attrs->texture,
+			    PVR_FILTER_BILINEAR);
+
+	  cxt.blend.src = PVR_BLEND_ZERO;
+	  cxt.blend.dst = PVR_BLEND_SRCALPHA;
+	  cxt.txr.env = PVR_TXRENV_MODULATE;
+	  cxt.depth.comparison = PVR_DEPTHCMP_GEQUAL;
+	  cxt.gen.specular = 1;
+
+	  pvr_poly_compile (&hdr, &cxt);
+
+	  /* I think this is wrong.  We probably want just the rotation part
+	     of the modelview matrix, not the same inverse-transposed.
+	     Otherwise maybe change the frame of reference and use one of the
+	     other available matrices, or something.  */
+	  vec_transform3_fipr (x_orient, (float *) obj_orient->normal_xform,
+			       use_strip->s_attrs->uv_orient);
+	  
+	  for (i = 0; i < use_strip->length; i++)
+	    {
+	      vec_add (&strip_mid[0], &strip_mid[0],
+		       &(*use_strip->start)[i][0]);
+	      vec_add (&strip_avgnorm[0], &strip_avgnorm[0],
+		       &(*use_strip->normals)[i][0]);
+	    }
+
+	  vec_scale (&strip_mid[0], &strip_mid[0], 1.0f / use_strip->length);
+	  vec_normalize (&strip_avgnorm[0], &strip_avgnorm[0]);
+
+	  vec_sub (light_incident, &lights->light[0].pos_xform[0],
+		   &strip_mid[0]);
+	  vec_normalize (light_incident, light_incident);
+
+	  s_dot_n = vec_dot (&strip_avgnorm[0], light_incident);
+	  /* Elevation (T) angle:
+	     s.n = |s| |n| cos T
+	     T = acos (s.n / (|s| * |n|))
+	     |s| and |n| are both 1.  */
+	  t = M_PI / 2 - acosf (s_dot_n);
+
+	  if (t < 0.0f)
+	    t = 0.0f;
+
+	  /* Rotation (Q) angle:
+	     d x r = (|d| |r| sin Q) n
+	     |d x r| / (|d| |r|) = sin Q.  */
+	  vec_scale (f, &strip_avgnorm[0], s_dot_n);
+	  vec_sub (d, light_incident, f);
+	  vec_cross (d_cross_r, d, x_orient);
+	  dxr_len = vec_length (d_cross_r);
+	  d_len = vec_length (d);
+	  q = asinf (dxr_len / d_len);
+
+	  over_pi = vec_dot (d, x_orient) < 0.0f;
+	  if (over_pi)
+	    q = M_PI - q;
+
+	  over_2pi = vec_dot (d_cross_r, &strip_avgnorm[0]) < 0.0f;
+	  if (over_2pi)
+	    q = 2 * M_PI - q;
+
+	  vert.oargb = bumpmap_set_bump_direction (t, 2 * M_PI - q,
+			 obj->bump_map->intensity);
+
+	  pvr_prim (&hdr, sizeof (hdr));
+	  
+	  vert.argb = 0;  /* Not used for this blend mode.  */
+
+	  mat_load (view->projection);
+	  
+	  for (i = 0; i < use_strip->length; i++)
+	    {
+	      int last = (i == use_strip->length - 1);
+	      float *invec = &(*use_strip->start)[i][0];
+	      float x, y, z;
+	      
+	      x = invec[0];
+	      y = invec[1];
+	      z = invec[2];
+	      mat_trans_single (x, y, z);
+
+	      vert.flags = (last) ? PVR_CMD_VERTEX_EOL : PVR_CMD_VERTEX;
+	      vert.x = x;
+	      vert.y = y;
+	      vert.z = z;
+	      vert.u = (*use_strip->texcoords)[i][0];
+	      vert.v = (*use_strip->texcoords)[i][1];
+	      pvr_prim (&vert, sizeof (vert));
+	      if (i == 0 && use_strip->inverse)
+	        pvr_prim (&vert, sizeof (vert));
+	    }
+	}
+    }
+
+  glKosMatrixDirty ();
+}
+
+/* Fast-path for lit, phong-shaded objects with no texture.  */
+
+void
+object_render_untextured_phong (viewpoint *view, object *obj,
+				object_orientation *obj_orient,
+				lighting *lights, int list_type)
+{
+  unsigned int strip_max = max_strip_length (obj), i;
+  float (*trans)[][3], (*trans_norm)[][3];
+  strip *str;
+
+  vertex_attrs *attr_buf;
+  
+  assert (obj->fake_phong);
+  
+  if (list_type != PVR_LIST_OP_POLY)
+    return;
+  
+  pool_clear ();
+  
+  attr_buf = pool_alloc (sizeof (vertex_attrs) * strip_max);
+
+  trans = pool_alloc (sizeof (float) * 3 * strip_max);
+  trans_norm = pool_alloc (sizeof (float) * 3 * strip_max);
+
+  for (str = obj->striplist; str; str = str->next)
+    {
+      strip transformed_strip;
+      strip *use_strip;
+      strip *strip_starts[2] = { 0, 0 };
+      strip *strip_ends[2] = { 0, 0 };
+      pvr_poly_cxt_t cxt;
+      pvr_poly_hdr_t hdr;
+      strip *str_out, *iter;
+      unsigned int intens = (255 << 24)
+			    | (obj->fake_phong->intensity << 16)
+			    | (obj->fake_phong->intensity << 8)
+			    | obj->fake_phong->intensity;
+
+      mat_load (obj_orient->modelview);
+
+      for (i = 0; i < str->length; i++)
+        {
+	  float *vec, *outvec;
+	  float x, y, z, w = 1.0;
+	  
+	  vec = &(*str->start)[i][0];
+	  PREFETCH (&vec[5]);
+	  outvec = &(*trans)[i][0];
+	  
+	  x = vec[0];
+	  y = vec[1];
+	  z = vec[2];
+	  mat_trans_nodiv (x, y, z, w);
+	  outvec[0] = x;
+	  outvec[1] = y;
+	  outvec[2] = z;
+	}
+
+      if (str->normals)
+        {
+	  mat_load (obj_orient->normal_xform);
+
+	  for (i = 0; i < str->length; i++)
+            {
+	      float *norm, *outnorm;
+	      float x, y, z, w = 1.0;
+
+	      norm = &(*str->normals)[i][0];
+	      PREFETCH (&norm[5]);
+	      outnorm = &(*trans_norm)[i][0];
+	      
+	      x = norm[0];
+	      y = norm[1];
+	      z = norm[2];
+	      mat_trans_nodiv (x, y, z, w);
+	      outnorm[0] = x;
+	      outnorm[1] = y;
+	      outnorm[2] = z;
+	    }
+	}
+
+      transformed_strip.start = trans;
+      transformed_strip.length = str->length;
+      if (str->normals)
+	transformed_strip.normals = trans_norm;
+      else
+        transformed_strip.normals = NULL;
+      transformed_strip.texcoords = str->texcoords;
+      transformed_strip.inverse = str->inverse;
+      transformed_strip.v_attrs = attr_buf;
+      transformed_strip.s_attrs = str->s_attrs;
+      transformed_strip.next = NULL;
+
+      if (obj->clip)
+        use_strip = do_clipping (view, &transformed_strip);
+      else
+        use_strip = &transformed_strip;
+
+      if (!use_strip)
+        continue;
+
+      pvr_poly_cxt_txr (&cxt, PVR_LIST_OP_POLY,
+			PVR_TXRFMT_PAL8BPP | PVR_TXRFMT_TWIDDLED,
+			obj->fake_phong->xsize, obj->fake_phong->ysize,
+			obj->fake_phong->highlight, PVR_FILTER_BILINEAR);
+
+      cxt.txr.uv_clamp = PVR_UVCLAMP_UV;
+      //cxt.blend.src = PVR_BLEND_ZERO;
+      //cxt.blend.dst = PVR_BLEND_SRCALPHA;
+      cxt.txr.env = PVR_TXRENV_MODULATE;
+      cxt.gen.specular = 1;
+
+      pvr_poly_compile (&hdr, &cxt);
+
+      /* Note: lightsource_fake_phong destroys xmtrx!  */
+      for (iter = use_strip; iter; iter = iter->next)
+	for (i = 0; i < iter->length; i++)
+	  lightsource_fake_phong ((float *) &(*iter->start)[i][0],
+				  (float *) &(*iter->normals)[i][0],
+				  &lights->light[0].pos_xform[0],
+				  &lights->light[0].up_xform[0],
+				  &view->eye_pos[0],
+				  view->inv_camera_orientation,
+				  iter->v_attrs, i);
+
+      restrip_list (use_strip, fakephong_classify_triangle_1pass,
+		    strip_starts, strip_ends, pool_alloc);
+
+      mat_load (view->projection);
+
+      pvr_prim (&hdr, sizeof (hdr));
+
+      for (str_out = strip_starts[0]; str_out; str_out = str_out->next)
+        {
+	  unsigned int i;
+	  pvr_vertex_t vert;
+
+          if (str_out->length < 3)
+	    continue;
+
+	  vert.argb = intens;
+
+	  for (i = 0; i < str_out->length; i++)
+	    {
+	      float *invec = &(*str_out->start)[i][0];
+	      float x, y, z;
+	      int last = (i == str_out->length - 1);
+
+	      vert.oargb = lightsource_diffuse (invec,
+	        &(*str_out->normals)[i][0], &obj->ambient, &obj->pigment,
+		&lights->light[0].pos_xform[0]);
+
+	      x = invec[0];
+	      y = invec[1];
+	      z = invec[2];
+	      mat_trans_single (x, y, z);
+
+	      vert.flags = (last) ? PVR_CMD_VERTEX_EOL : PVR_CMD_VERTEX;
+	      vert.x = x;
+	      vert.y = y;
+	      vert.z = z;
+	      vert.u = str_out->v_attrs[i].fakephong.texc[0];
+	      vert.v = str_out->v_attrs[i].fakephong.texc[1];
+	      pvr_prim (&vert, sizeof (vert));
+	      if (i == 0 && str_out->inverse)
+		pvr_prim (&vert, sizeof (vert));
+	    }
+	}
+
+      pvr_poly_cxt_col (&cxt, PVR_LIST_OP_POLY);
+      pvr_poly_compile (&hdr, &cxt);
+      pvr_prim (&hdr, sizeof (hdr));
+      
+      for (str_out = strip_starts[1]; str_out; str_out = str_out->next)
+        {
+	  unsigned int i;
+	  pvr_vertex_t vert;
+
+          if (str_out->length < 3)
+	    continue;
+
+	  vert.u = vert.v = 0;
+	  vert.oargb = 0;
+
+	  for (i = 0; i < str_out->length; i++)
+	    {
+	      float *invec = &(*str_out->start)[i][0];
+	      float x, y, z;
+	      int last = (i == str_out->length - 1);
+
+	      vert.argb = lightsource_diffuse (invec,
+	        &(*str_out->normals)[i][0], &obj->ambient, &obj->pigment,
+		&lights->light[0].pos_xform[0]);
+
+	      x = invec[0];
+	      y = invec[1];
+	      z = invec[2];
+	      mat_trans_single (x, y, z);
+
+	      vert.flags = (last) ? PVR_CMD_VERTEX_EOL : PVR_CMD_VERTEX;
+	      vert.x = x;
+	      vert.y = y;
+	      vert.z = z;
+	      pvr_prim (&vert, sizeof (vert));
+	      if (i == 0 && str_out->inverse)
+		pvr_prim (&vert, sizeof (vert));
+	    }
+	}
+    }
+
+  glKosMatrixDirty ();
+}
+
+#ifdef USE_DMA
+void
+object_render_deferred (viewpoint *view, object *obj,
+			object_orientation *obj_orient, lighting *lights)
 {
   unsigned int strip_max = max_strip_length (obj), i;
   float (*trans)[][3], (*trans_norm)[][3];
@@ -711,147 +1674,15 @@ object_render_immediate (viewpoint *view, object *obj,
       printf ("use_strip now %p (2)\n", use_strip);
 #endif
 
-      if (obj->env_map)
-        {
-	  /* Dual-paraboloid environment mapping.  */
-	  strip *strip_starts[3] = { 0, 0, 0 };
-	  strip *strip_ends[3] = { 0, 0, 0 };
-	  pvr_poly_cxt_t cxt;
-	  pvr_poly_hdr_t hdr;
-	  strip *str_out, *iter;
-	  pvr_vertex_t vert;
-	  int class;
-
-	  vert.argb = PVR_PACK_COLOR (1.0f, 1.0f, 1.0f, 1.0f);
-	  vert.oargb = 0;
-
-	  for (iter = use_strip; iter; iter = iter->next)
-	    for (i = 0; i < iter->length; i++)
-	      envmap_dual_para_texcoords
-		(&iter->v_attrs[i].env_map.texc_f[0],
-		 &iter->v_attrs[i].env_map.texc_b[0],
-		 (*iter->start)[i], (*iter->normals)[i],
-		 &c_eyepos[0], *(view->inv_camera_orientation));
-
-	  restrip_list (use_strip, envmap_classify_triangle,
-			strip_starts, strip_ends, pool_alloc);
-
-	  mat_load (view->projection);
-
-	  /* This way of doing things wastes a lot of time here (due to
-	     recalculation of above), and it's not really necessary.  Only
-	     temporary until we get DMA working.  */
-
-          if (pass == 0)
-	    {
-	      /* Render front strips.  */
-	      pvr_poly_cxt_txr (&cxt, PVR_LIST_OP_POLY,
-				obj->env_map->front_txr_fmt,
-				obj->env_map->xsize, obj->env_map->ysize,
-				obj->env_map->front_txr, PVR_FILTER_BILINEAR);
-
-	      pvr_poly_compile (&hdr, &cxt);
-	      
-	      /* Render both front and front-and-back strips (class 0 and
-	         2).  */
-	      for (class = 0; class <= 2; class += 2)
-		for (str_out = strip_starts[class]; str_out;
-		     str_out = str_out->next)
-	          {
-		    if (str_out->length < 3)
-		      continue;
-
-		    pvr_prim (&hdr, sizeof (hdr));
-
-		    for (i = 0; i < str_out->length; i++)
-		      {
-			float *invec = &(*str_out->start)[i][0];
-			float x, y, z;
-			int last = (i == str_out->length - 1);
-
-			x = invec[0];
-			y = invec[1];
-			z = invec[2];
-			mat_trans_single (x, y, z);
-			
-			vert.flags = (last) ? PVR_CMD_VERTEX_EOL
-					    : PVR_CMD_VERTEX;
-			vert.x = x;
-			vert.y = y;
-			vert.z = z;
-			vert.u = str_out->v_attrs[i].env_map.texc_f[0];
-			vert.v = str_out->v_attrs[i].env_map.texc_f[1];
-			pvr_prim (&vert, sizeof (vert));
-			if (i == 0 && str_out->inverse)
-		          pvr_prim (&vert, sizeof (vert));
-		      }
-		  }
-
-	      pvr_poly_cxt_txr (&cxt, PVR_LIST_OP_POLY,
-				obj->env_map->back_txr_fmt,
-				obj->env_map->xsize, obj->env_map->ysize,
-				obj->env_map->back_txr, PVR_FILTER_BILINEAR);
-			
-	      /* Render back-only strips.  */
-	      class = 1;
-	    }
-	  else
-	    {
-	      pvr_poly_cxt_txr (&cxt, ALPHA_LIST,
-	      			obj->env_map->back_txr_fmt, obj->env_map->xsize,
-				obj->env_map->ysize, obj->env_map->back_txr,
-				PVR_FILTER_BILINEAR);
-	      cxt.txr.uv_clamp = PVR_UVCLAMP_UV;
-	      cxt.blend.src = PVR_BLEND_SRCALPHA;
-	      cxt.blend.dst = PVR_BLEND_INVSRCALPHA;
-	      cxt.txr.env = PVR_TXRENV_MODULATE;
-	      cxt.depth.comparison = PVR_DEPTHCMP_GEQUAL;
-	      /* Render front-and-back strips (back part, with alpha).  */
-	      class = 2;
-	    }
-
-	  pvr_poly_compile (&hdr, &cxt);
-
-	  for (str_out = strip_starts[class]; str_out; str_out = str_out->next)
-	    {
-	      if (str_out->length < 3)
-		continue;
-
-	      pvr_prim (&hdr, sizeof (hdr));
-
-	      for (i = 0; i < str_out->length; i++)
-		{
-		  float *invec = &(*str_out->start)[i][0];
-		  float x, y, z;
-		  int last = (i == str_out->length - 1);
-
-		  x = invec[0];
-		  y = invec[1];
-		  z = invec[2];
-		  mat_trans_single (x, y, z);
-
-		  vert.flags = (last) ? PVR_CMD_VERTEX_EOL
-				      : PVR_CMD_VERTEX;
-		  vert.x = x;
-		  vert.y = y;
-		  vert.z = z;
-		  vert.u = str_out->v_attrs[i].env_map.texc_b[0];
-		  vert.v = str_out->v_attrs[i].env_map.texc_b[1];
-		  pvr_prim (&vert, sizeof (vert));
-		  if (i == 0 && str_out->inverse)
-		    pvr_prim (&vert, sizeof (vert));
-		}
-	    }
-	}
-
       /* First pass for bump mapping, fake phong -- for now, plain
          gouraud-shaded polygons only.  */
-      if (pass == 0 && !obj->env_map)
+      if (!obj->env_map)
         {
 	  /* First pass, dot-product lighting.  */
 	  pvr_poly_cxt_t cxt;
 	  pvr_poly_hdr_t hdr;
 	  pvr_vertex_t vert;
+	  strip *iter_strip;
 
 #ifdef DEBUG
 	  printf ("pass 0, not environment mapping\n");
@@ -874,23 +1705,24 @@ object_render_immediate (viewpoint *view, object *obj,
 	  
 	  pvr_poly_compile (&hdr, &cxt);
 
-	  pvr_prim (&hdr, sizeof (hdr));
+	  pvr_list_prim (PVR_LIST_OP_POLY, &hdr, sizeof (hdr));
 	  
 	  vert.oargb = 0;
 	  vert.argb = PVR_PACK_COLOR (1.0f, 1.0f, 1.0f, 1.0f);
 
 	  mat_load (view->projection);
 
-	  for (; use_strip; use_strip = use_strip->next)
-	    for (i = 0; i < use_strip->length; i++)
+	  for (iter_strip = use_strip; iter_strip;
+	       iter_strip = iter_strip->next)
+	    for (i = 0; i < iter_strip->length; i++)
 	      {
-		float *invec = &(*use_strip->start)[i][0];
+		float *invec = &(*iter_strip->start)[i][0];
 		float *texc = NULL;
 		float x, y, z;
-		int last = (i == use_strip->length - 1);
+		int last = (i == iter_strip->length - 1);
 
-		if (use_strip->texcoords)
-		  texc = &(*use_strip->texcoords)[i][0];
+		if (iter_strip->texcoords)
+		  texc = &(*iter_strip->texcoords)[i][0];
 
 		//PREFETCH (&(*use_strip->start)[i + 2][0]);
 
@@ -902,9 +1734,9 @@ object_render_immediate (viewpoint *view, object *obj,
 		//PREFETCH (&(*use_strip->normals)[i + 2][0]);
 
 		vert.flags = (last) ? PVR_CMD_VERTEX_EOL : PVR_CMD_VERTEX;
-		if (!obj->bump_map && use_strip->normals && lights->active > 0)
-		  vert.argb = lightsource_diffuse (&(*use_strip->start)[i][0],
-		    &(*use_strip->normals)[i][0], &obj->ambient, &obj->pigment,
+		if (!obj->bump_map && iter_strip->normals && lights->active > 0)
+		  vert.argb = lightsource_diffuse (&(*iter_strip->start)[i][0],
+		    &(*iter_strip->normals)[i][0], &obj->ambient, &obj->pigment,
 		    &lights->light[0].pos_xform[0]);
 		vert.x = x;
 		vert.y = y;
@@ -919,80 +1751,14 @@ object_render_immediate (viewpoint *view, object *obj,
 		    vert.u = 0;
 		    vert.v = 0;
 		  }
-		pvr_prim (&vert, sizeof (vert));
-		if (i == 0 && use_strip->inverse)
-		  pvr_prim (&vert, sizeof (vert));
-	      }
-	}
-
-      /* First pass for vertex fog (experimental).
-         This is wrong.  Fog should be rendered in one pass.  */
-      if (pass == 1 && obj->vertex_fog)
-        {
-	  pvr_poly_cxt_t cxt;
-	  pvr_poly_hdr_t hdr;
-	  pvr_vertex_type3_t vert;
-	  strip *iter;
-	  
-	  pvr_poly_cxt_txr (&cxt, PVR_LIST_TR_POLY,
-			    PVR_TXRFMT_RGB565 | PVR_TXRFMT_TWIDDLED,
-			    obj->vertex_fog->w, obj->vertex_fog->h,
-			    obj->vertex_fog->texture, PVR_FILTER_BILINEAR);
-	  
-	  cxt.gen.fog_type = PVR_FOG_VERTEX;
-
-	  /*cxt.blend.src = PVR_BLEND_ONE;
-	  cxt.blend.dst = PVR_BLEND_ZERO;
-	  cxt.txr.env = PVR_TXRENV_MODULATE;
-	  cxt.depth.comparison = PVR_DEPTHCMP_GEQUAL;
-	  */
-	  cxt.gen.specular = 1;
-	  
-	  pvr_poly_compile (&hdr, &cxt);
-
-	  pvr_prim (&hdr, sizeof (hdr));
-	  
-	  //vert.fargb = 0;
-	  vert.argb = PVR_PACK_COLOR (1.0f, 1.0f, 1.0f, 1.0f);
-	  
-	  //pvr_fog_far_depth (1);
-
-	  mat_load (view->projection);
-
-	  for (iter = use_strip; iter; iter = iter->next)
-	    for (i = 0; i < iter->length; i++)
-	      {
-		int last = (i == iter->length - 1);
-		float fogginess;
-		float *invec = &(*iter->start)[i][0];
-		float x, y, z;
-
-		x = invec[0];
-		y = invec[1];
-		z = invec[2];
-		mat_trans_single (x, y, z);
-
-		vert.flags = (last) ? PVR_CMD_VERTEX_EOL : PVR_CMD_VERTEX;
-		vert.argb = lightsource_diffuse (&invec[0],
-			      &(*iter->normals)[i][0], &obj->ambient,
-			      &obj->pigment, &lights->light[0].pos_xform[0]);
-		fogginess = obj->vertex_fog->fogging (x, y, z,
-						      &iter->v_attrs[i]);
-
-		vert.oargb = PVR_PACK_COLOR (fogginess, 0.0, 0.0, 0.0);
-		vert.x = x;
-		vert.y = y;
-		vert.z = z;
-		vert.u = 0;
-		vert.v = 0;
-		pvr_prim (&vert, sizeof (vert));
-		if (i == 0 && iter->inverse)
-		  pvr_prim (&vert, sizeof (vert));
+		pvr_list_prim (PVR_LIST_OP_POLY, &vert, sizeof (vert));
+		if (i == 0 && iter_strip->inverse)
+		  pvr_list_prim (PVR_LIST_OP_POLY, &vert, sizeof (vert));
 	      }
 	}
 
       /* Emit polygons for fake phong highlight.  */
-      if (pass == 1 && obj->fake_phong)
+      if (obj->fake_phong)
         {
 	  strip *strip_starts[1] = { 0 };
 	  strip *strip_ends[1] = { 0 };
@@ -1004,13 +1770,13 @@ object_render_immediate (viewpoint *view, object *obj,
 				| (obj->fake_phong->intensity << 8)
 				| obj->fake_phong->intensity;
 
-	  pvr_poly_cxt_txr (&cxt, ALPHA_LIST,
+	  pvr_poly_cxt_txr (&cxt, PVR_LIST_TR_POLY,
 			    PVR_TXRFMT_PAL8BPP | PVR_TXRFMT_TWIDDLED,
 			    obj->fake_phong->xsize, obj->fake_phong->ysize,
 			    obj->fake_phong->highlight, PVR_FILTER_BILINEAR);
 	  	  
 	  cxt.txr.uv_clamp = PVR_UVCLAMP_UV;
-	  cxt.depth.comparison = PVR_DEPTHCMP_GEQUAL;
+	  cxt.depth.comparison = PVR_DEPTHCMP_LEQUAL;
 	  cxt.blend.src = PVR_BLEND_ONE;
 	  cxt.blend.dst = PVR_BLEND_ONE;
 	  
@@ -1032,7 +1798,7 @@ object_render_immediate (viewpoint *view, object *obj,
 
 	  mat_load (view->projection);
 
-	  pvr_prim (&hdr, sizeof (hdr));
+	  pvr_list_prim (PVR_LIST_TR_POLY, &hdr, sizeof (hdr));
 
 	  for (str_out = strip_starts[0]; str_out; str_out = str_out->next)
             {
@@ -1066,128 +1832,17 @@ object_render_immediate (viewpoint *view, object *obj,
 		  vert.z = z;
 		  vert.u = str_out->v_attrs[i].fakephong.texc[0];
 		  vert.v = str_out->v_attrs[i].fakephong.texc[1];
-		  pvr_prim (&vert, sizeof (vert));
+		  pvr_list_prim (PVR_LIST_TR_POLY, &vert, sizeof (vert));
 		  if (i == 0 && str_out->inverse)
-		    pvr_prim (&vert, sizeof (vert));
+		    pvr_list_prim (PVR_LIST_TR_POLY, &vert, sizeof (vert));
 		}
-	    }
-	}
-
-      /* Bump mapping rendered as second pass.  It just modulates (darkens) the
-         colour already in the buffer, so can't be used for bumpy specular
-	 highlights -- the hardware's not capable of that.  */
-      if (pass == 1 && obj->bump_map)
-        {
-	  float x_orient[3];
-	  unsigned int i;
-	  pvr_poly_cxt_t cxt;
-	  pvr_poly_hdr_t hdr;
-	  pvr_vertex_t vert;
-	  float strip_mid[3] = {0, 0, 0}, strip_avgnorm[3] = {0, 0, 0};
-	  float light_incident[3], s_dot_n, t, f[3], d[3];
-	  float d_cross_r[3], dxr_len, d_len, q;
-	  int over_pi, over_2pi;
-
-	  pvr_poly_cxt_txr (&cxt, ALPHA_LIST,
-			    PVR_TXRFMT_BUMP | PVR_TXRFMT_TWIDDLED,
-			    use_strip->s_attrs->xsize,
-			    use_strip->s_attrs->ysize,
-			    use_strip->s_attrs->texture,
-			    PVR_FILTER_BILINEAR);
-
-	  cxt.blend.src = PVR_BLEND_ZERO;
-	  cxt.blend.dst = PVR_BLEND_SRCALPHA;
-	  cxt.txr.env = PVR_TXRENV_MODULATE;
-	  cxt.depth.comparison = PVR_DEPTHCMP_GEQUAL;
-	  cxt.gen.specular = 1;
-
-	  pvr_poly_compile (&hdr, &cxt);
-
-	  /* I think this is wrong.  We probably want just the rotation part
-	     of the modelview matrix, not the same inverse-transposed.
-	     Otherwise maybe change the frame of reference and use one of the
-	     other available matrices, or something.  */
-	  vec_transform3_fipr (x_orient, (float *) obj_orient->normal_xform,
-			       use_strip->s_attrs->uv_orient);
-	  
-	  for (i = 0; i < use_strip->length; i++)
-	    {
-	      vec_add (&strip_mid[0], &strip_mid[0],
-		       &(*use_strip->start)[i][0]);
-	      vec_add (&strip_avgnorm[0], &strip_avgnorm[0],
-		       &(*use_strip->normals)[i][0]);
-	    }
-
-	  vec_scale (&strip_mid[0], &strip_mid[0], 1.0f / use_strip->length);
-	  vec_normalize (&strip_avgnorm[0], &strip_avgnorm[0]);
-
-	  vec_sub (light_incident, &lights->light[0].pos_xform[0],
-		   &strip_mid[0]);
-	  vec_normalize (light_incident, light_incident);
-
-	  s_dot_n = vec_dot (&strip_avgnorm[0], light_incident);
-	  /* Elevation (T) angle:
-	     s.n = |s| |n| cos T
-	     T = acos (s.n / (|s| * |n|))
-	     |s| and |n| are both 1.  */
-	  t = M_PI / 2 - acosf (s_dot_n);
-
-	  if (t < 0.0f)
-	    t = 0.0f;
-
-	  /* Rotation (Q) angle:
-	     d x r = (|d| |r| sin Q) n
-	     |d x r| / (|d| |r|) = sin Q.  */
-	  vec_scale (f, &strip_avgnorm[0], s_dot_n);
-	  vec_sub (d, light_incident, f);
-	  vec_cross (d_cross_r, d, x_orient);
-	  dxr_len = vec_length (d_cross_r);
-	  d_len = vec_length (d);
-	  q = asinf (dxr_len / d_len);
-
-	  over_pi = vec_dot (d, x_orient) < 0.0f;
-	  if (over_pi)
-	    q = M_PI - q;
-
-	  over_2pi = vec_dot (d_cross_r, &strip_avgnorm[0]) < 0.0f;
-	  if (over_2pi)
-	    q = 2 * M_PI - q;
-
-	  vert.oargb = bumpmap_set_bump_direction (t, 2 * M_PI - q,
-			 obj->bump_map->intensity);
-
-	  pvr_prim (&hdr, sizeof (hdr));
-	  
-	  vert.argb = 0;  /* Not used for this blend mode.  */
-
-	  mat_load (view->projection);
-	  
-	  for (i = 0; i < use_strip->length; i++)
-	    {
-	      int last = (i == use_strip->length - 1);
-	      float *invec = &(*use_strip->start)[i][0];
-	      float x, y, z;
-	      
-	      x = invec[0];
-	      y = invec[1];
-	      z = invec[2];
-	      mat_trans_single (x, y, z);
-
-	      vert.flags = (last) ? PVR_CMD_VERTEX_EOL : PVR_CMD_VERTEX;
-	      vert.x = x;
-	      vert.y = y;
-	      vert.z = z;
-	      vert.u = (*use_strip->texcoords)[i][0];
-	      vert.v = (*use_strip->texcoords)[i][1];
-	      pvr_prim (&vert, sizeof (vert));
-	      if (i == 0 && use_strip->inverse)
-	        pvr_prim (&vert, sizeof (vert));
 	    }
 	}
     }
 
   glKosMatrixDirty ();
 }
+#endif
 
 strip *
 strip_cons (strip *prev, unsigned int length, unsigned int alloc_bits)

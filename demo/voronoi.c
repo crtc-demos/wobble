@@ -442,7 +442,11 @@ cone (float cx, float cy, float radius, uint32_t colour)
   vert.argb = colour;
   vert.u = vert.v = 0;
 
+#ifdef USE_DMA
+  pvr_list_prim (PVR_LIST_OP_POLY, &hdr, sizeof (hdr));
+#else
   pvr_prim (&hdr, sizeof (hdr));
+#endif
     
   for (i = 0; i < 30; i++)
     {
@@ -452,21 +456,33 @@ cone (float cx, float cy, float radius, uint32_t colour)
       vert.x = cx;
       vert.y = cy;
       vert.z = 20;
-      
+
+#ifdef USE_DMA
+      pvr_list_prim (PVR_LIST_OP_POLY, &vert, sizeof (vert));
+#else
       pvr_prim (&vert, sizeof (vert));
+#endif
       
       vert.x = cx + offx[i];
       vert.y = cy + offy[i];
       vert.z = 1;
       
+#ifdef USE_DMA
+      pvr_list_prim (PVR_LIST_OP_POLY, &vert, sizeof (vert));
+#else
       pvr_prim (&vert, sizeof (vert));
+#endif
       
       vert.flags = PVR_CMD_VERTEX_EOL;
       vert.x = cx + offx[next];
       vert.y = cy + offy[next];
       vert.z = 1;
       
+#ifdef USE_DMA
+      pvr_list_prim (PVR_LIST_OP_POLY, &vert, sizeof (vert));
+#else
       pvr_prim (&vert, sizeof (vert));
+#endif
     }
 }
 
@@ -475,8 +491,9 @@ cone (float cx, float cy, float radius, uint32_t colour)
 static float xpos[NUMBER], ypos[NUMBER];
 static float dx[NUMBER], dy[NUMBER];
 static float pt_red[NUMBER], pt_green[NUMBER], pt_blue[NUMBER];
-static float phase = 0, xmag = 800, xfreq = 0.5, ymag = 800, yfreq = 0.7;
-static int shape = 0;
+static float phase = 0;
+
+static float xspd[NUMBER], yspd[NUMBER];
 
 #define CLAMPING 0
 
@@ -510,6 +527,8 @@ voronoi_preinit (void)
       float b = (float)(rand () & 255) / 255.0f;*/
       xpos[i] = rand () % 640;
       ypos[i] = rand () % 480;
+      xspd[i] = ((xpos[i] - 320) / 50.0) * (rand () % 256) / 256.0;
+      yspd[i] = ((ypos[i] - 240) / 50.0) * (rand () % 256) / 256.0;
       dx[i] = ((rand () & 255) - 127.5) / 32.0f;
       dy[i] = ((rand () & 255) - 127.5) / 32.0f;
       /* colour[i] = PVR_PACK_COLOR (1.0f, r, g, b); */
@@ -524,7 +543,7 @@ voronoi_effect (uint32_t time_offset, void *params, int shape, viewpoint *view,
 {
   unsigned int i;
 
-  if (pass != 0)
+  if (pass != PVR_LIST_OP_POLY)
     return;
       
   for (i = 0; i < NUMBER; i++)
@@ -542,6 +561,24 @@ voronoi_effect (uint32_t time_offset, void *params, int shape, viewpoint *view,
 
       switch (shape)
 	{
+	case -1:
+	  /* Starfield.  */
+	  {
+	    want_x = xpos[i];
+	    want_y = ypos[i];
+	    want_colour = i * 1024;
+	    xpos[i] += xspd[i];
+	    ypos[i] += yspd[i];
+	    if (xpos[i] >= 640.0 || xpos[i] < 0.0
+	        || ypos[i] >= 480.0 || ypos[i] < 0.0)
+	      {
+	        xpos[i] = 320.0;
+		ypos[i] = 240.0;
+		xspd[i] = ((rand () % 640) - 320) / 50.0;
+		yspd[i] = ((rand () % 480) - 320) / 50.0;
+	      }
+	  }
+	  break;
 	case 0:
 	  want_x = letter_c1[i].x;
 	  want_y = 479 - letter_c1[i].y;
@@ -633,6 +670,7 @@ voronoi_effect (uint32_t time_offset, void *params, int shape, viewpoint *view,
 effect_methods voronoi_methods = {
   .preinit_assets = &voronoi_preinit,
   .init_effect = NULL,
+  .prepare_frame = NULL,
   .display_effect = &voronoi_effect,
   .uninit_effect = NULL
 };

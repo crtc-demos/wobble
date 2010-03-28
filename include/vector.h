@@ -396,6 +396,10 @@ vec_normal_from_modelview (FLOAT_TYPE *dst, const FLOAT_TYPE *src)
   dst[13] = 0.0f;
   dst[14] = 0.0f;
   dst[15] = 1.0f;
+  
+  vec_normalize (&dst[0], &dst[0]);
+  vec_normalize (&dst[4], &dst[4]);
+  vec_normalize (&dst[8], &dst[8]);
 }
 
 #endif

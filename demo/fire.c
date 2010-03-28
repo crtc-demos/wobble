@@ -24,13 +24,14 @@ static int warp_active = 0;
 
 static pvr_ptr_t flame_texture;
 
+static uint16 *cooltmp = 0;
+
 static void
 render_cooling_texture (void)
 {
 #define NOISEFN(X,Y) perlin_noise_2D ((float) (X) / 10, (float) (Y) / 10, 2)
   int x, y;
   float min_intens = 0.0, max_intens = 0.0;
-  uint16 *cooltmp;
   
   dbgio_printf ("Making cooling texture... ");
   
@@ -67,20 +68,16 @@ render_cooling_texture (void)
 	cooltmp[y * 1024 + x] = alpha << 12;
       }
 
-  pvr_txr_load_ex (cooltmp, cooling_texture, 1024, 512, PVR_TXRLOAD_16BPP);
-
-  free (cooltmp);
   
   dbgio_printf ("done.\n");
-  
-  flame_texture = pvr_mem_malloc (256 * 256 * 2);
-  png_to_texture ("/rd/flametex.png", flame_texture, PNG_NO_ALPHA);
 #undef NOISEFN
 }
 
 #define DISTORT_DEPTH 0.12f
 #define SEED_DEPTH 0.125f
-#define COOLING_DEPTH DISTORT_DEPTH
+#define COOLING_DEPTH 0.12f
+
+#define FLAME_DRAW_DEPTH 0.12f
 
 static void
 draw_box (void)
@@ -250,7 +247,7 @@ draw_texture (void)
   vert.flags = PVR_CMD_VERTEX;
   vert.x = 0.0f;
   vert.y = 480.0f;
-  vert.z = COOLING_DEPTH;
+  vert.z = FLAME_DRAW_DEPTH;
   vert.u = 0;
   vert.v = 0;
   vert.argb = 0xffffffff;
@@ -294,7 +291,7 @@ draw_cooler (void)
   vert.flags = PVR_CMD_VERTEX;
   vert.x = 0.0f;
   vert.y = 480.0f;
-  vert.z = 7.0f;
+  vert.z = COOLING_DEPTH;
   vert.u = 0.0f;
   vert.v = cooling_offset / 512.0f;
   vert.argb = 0xffffffff;
@@ -331,9 +328,9 @@ draw_cooler (void)
     cxt.blend.src = PVR_BLEND_ONE;
     cxt.blend.dst = PVR_BLEND_ONE;
     cxt.txr.env = PVR_TXRENV_MODULATE;
-    pvr_poly_compile (&poly, &cxt);
+    pvr_poly_compile (&hdr, &cxt);
     
-    pvr_prim (&poly, sizeof (poly));
+    pvr_prim (&hdr, sizeof (hdr));
     
     for (i = 0; i < 20; i++)
       {
@@ -377,8 +374,6 @@ preinit_fire (void)
   if (initialised)
     return;
 
-  cooling_texture = pvr_mem_malloc (1024 * 512 * 2);
-
   render_cooling_texture ();
   
   initialised = 1;
@@ -387,10 +382,24 @@ preinit_fire (void)
 static void
 init_effect (void *params)
 {
+  pvr_mem_print_list ();
+  // pvr_mem_reset ();
+
   warp_texture[0] = pvr_mem_malloc (1024 * 512 * 2);
   warp_texture[1] = pvr_mem_malloc (1024 * 512 * 2);
   memset (warp_texture[0], 0, 1024 * 512 * 2);
   memset (warp_texture[1], 0, 1024 * 512 * 2);
+
+  if (cooltmp)
+    {
+      cooling_texture = pvr_mem_malloc (1024 * 512 * 2);
+      pvr_txr_load_ex (cooltmp, cooling_texture, 1024, 512, PVR_TXRLOAD_16BPP);
+      free (cooltmp);
+      cooltmp = 0;
+    }
+
+  flame_texture = pvr_mem_malloc (256 * 256 * 2);
+  png_to_texture ("/rd/flametex.png", flame_texture, PNG_NO_ALPHA);
 }
 
 static void
@@ -398,7 +407,13 @@ uninit_effect (void *params)
 {
   pvr_mem_free (warp_texture[0]);
   pvr_mem_free (warp_texture[1]);
+}
+
+static void
+finalize_effect (void *params)
+{
   pvr_mem_free (cooling_texture);
+  pvr_mem_free (flame_texture);
 }
 
 static void
@@ -427,12 +442,12 @@ static void
 render_fire (uint32_t time_offset, void *params, int iparam, viewpoint *view,
 	     lighting *lights, int pass)
 {
-  if (pass != 1)
-    return;
+  if (pass == PVR_LIST_TR_POLY)
+    {
+      draw_texture ();
 
-  draw_texture ();
-
-  warp_active = 1 - warp_active;
+      warp_active = 1 - warp_active;
+    }
 }
 
 effect_methods fire_methods = {
@@ -440,5 +455,6 @@ effect_methods fire_methods = {
   .init_effect = &init_effect,
   .prepare_frame = &do_feedback,
   .display_effect = &render_fire,
-  .uninit_effect = &uninit_effect
+  .uninit_effect = &uninit_effect,
+  .finalize = &finalize_effect
 };

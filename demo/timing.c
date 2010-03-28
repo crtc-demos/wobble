@@ -34,10 +34,24 @@
 #include "fire.h"
 #include "bumpy_cubes.h"
 #include "foggy_tubes.h"
+#include "zoomy_duck.h"
+#include "cam_path.h"
+#include "building.h"
+#include "duck_fountain.h"
+#include "sky_box.h"
 
-#undef PLAY_AUDIO
-#define HOLD
+#define PLAY_AUDIO
+#undef HOLD
 #undef DEBUG
+
+#undef SKIP_TO_TIME
+//#define SKIP_TO_TIME 110000
+
+#ifdef SKIP_TO_TIME
+uint64_t offset_time = 0;
+#else
+#define offset_time 0
+#endif
 
 extern uint8 romdisk[];
 
@@ -59,13 +73,17 @@ static void
 init_pvr (void)
 {
   pvr_init_params_t params = {
-    { PVR_BINSIZE_32,	/* Opaque polygons.  */
+    { PVR_BINSIZE_16,	/* Opaque polygons.  */
       PVR_BINSIZE_0,	/* Opaque modifiers.  */
-      PVR_BINSIZE_32,	/* Translucent polygons.  */
+      PVR_BINSIZE_16,	/* Translucent polygons.  */
       PVR_BINSIZE_0,	/* Translucent modifiers.  */
-      PVR_BINSIZE_0 },	/* Punch-thrus.  */
-    2 * 1024 * 1024,	/* Vertex buffer size 2M.  */
+      PVR_BINSIZE_16 },	/* Punch-thrus.  */
+    1 * 1024 * 1024,	/* Vertex buffer size 2M.  */
+#ifdef USE_DMA
+    1,			/* Use DMA.  */
+#else
     0,			/* No DMA.  */
+#endif
     0			/* No FSAA.  */
   };
   
@@ -87,21 +105,74 @@ static torus_params torus2 = {
 */
 
 static do_thing_at sequence[] = {
-  /*{     0,  4000, &voronoi_methods, NULL, 0 },
-  {  4000,  8000, &voronoi_methods, NULL, 1 },
-  {  8000, 12000, &voronoi_methods, NULL, 2 },
-  { 12000, 16000, &voronoi_methods, NULL, 3 },*/
+#if 1
+  {     0, 10500, &voronoi_methods, NULL, -1, 0 },
+
+  { 10500, 31500, &wobble_tube_methods, NULL, 0, 0 },
+  { 10500, 31500, &skybox_methods, NULL, 0, 0 },
+  { 10500, 31500, &cam_path_methods, &wobble_tube_path, 0, 0 },
+
+  { 31500, 33500, &voronoi_methods, NULL, 0, 0 },
+
+  { 33500, 34500, &wobble_tube_methods, NULL, 0, 0 },
+  { 33500, 34500, &skybox_methods, NULL, 0, 0 },
+  { 33500, 34500, &cam_path_methods, &wobble_tube_path, 22000, 0 },
+
+  { 34500, 36500, &voronoi_methods, NULL, 1, 0 },
+
+  { 36500, 37500, &wobble_tube_methods, NULL, 0, 0 },
+  { 36500, 37500, &skybox_methods, NULL, 0, 0 },
+  { 36500, 37500, &cam_path_methods, &wobble_tube_path, 24000, 0 },
+
+  { 37500, 39500, &voronoi_methods, NULL, 2, 0 },
+  { 39500, 41500, &voronoi_methods, NULL, 3, 0 },
+
+  { 41500, 58000, &wobble_tube_methods, NULL, 0, 1 },
+  { 41500, 58000, &skybox_methods, NULL, 0, 0 },
+  { 41500, 58000, &cam_path_methods, &wobble_tube_path, 54000, 0 },
+  
+  { 58000, 60000, &zoomy_duck_methods, NULL, 0, 0 },
+
+  /* Voronoi picture of duck!  */
+  { 60000, 64500, &voronoi_methods, NULL, 4, 0 },
+
+  { 64500, 66500, &zoomy_duck_methods, NULL, 0, 1 },
+
+  { 66500, 125000, &wave_methods, NULL, 0, 1 },
+  { 66500, 125000, &building_methods, NULL, 0, 0 },
+  { 66500, 125000, &cam_path_methods, &waves_camera_path, 0, 0 },
+  { 66500, 125000, &skybox_methods, NULL, 0, 1 },
+
+  /* Only use the fire once...  */
+  { 125500, 160000, &fire_methods, NULL, 0, 1 },
+  { 135500, 150000, &bumpy_cube_methods, NULL, 0, 0 },
+
+  { 160000, 180000, &duck_fountain_methods, NULL, 0, 0 }
+
+#elif 0
+
+  { 0, 300000, &duck_fountain_methods, NULL, 0, 0 }
+#else
+
+  { 0, 300000, &wave_methods, NULL, 0, 0 },
+  { 0, 300000, &building_methods, NULL, 0, 0 },
+#  ifndef HOLD
+  { 0, 180000, &cam_path_methods, &waves_camera_path, 0, 0 }
+#  endif
+#endif
+};
+
+/* Other random bits...  */
+
   /*{ 20000, 22500, &torus_methods, &torus1, 0 },
   { 21000, 23500, &torus_methods, &torus2, 0 },
   { 22000, 24500, &torus_methods, &torus1, 1 },
   { 25000, 26000, &torus_methods, &torus2, 0 } */
-  /*{     0, 300000, &wobble_tube_methods, NULL, 0 }*/
-  { 0, 300000, &wave_methods, NULL, 0 }
   /*{     0,  10000, &wobble_tube_methods, NULL, 0 },*/
   /*{ 0, 600000, &fire_methods, NULL, 0 },
   { 0, 600000, &bumpy_cube_methods, NULL, 0 }*/
   /*{ 0, 22000, &foggy_tube_methods, NULL, 0 }*/
-};
+  /*{0, 300000, &zoomy_duck_methods, NULL, 0 }*/
 
 #define ARRAY_SIZE(X) (sizeof (X) / sizeof (X[0]))
 
@@ -155,6 +226,10 @@ rotate_around_x (float *vec, float ang)
 
 #endif
 
+#ifdef USE_DMA
+uint8 dmabuffers[2][1024*1024] __attribute__((aligned(32)));
+#endif
+
 int
 main (int argc, char *argv[])
 {
@@ -168,6 +243,7 @@ main (int argc, char *argv[])
   do_thing_at *active_effects[MAX_ACTIVE];
   unsigned int num_active_effects;
   const int num_effects = ARRAY_SIZE (sequence);
+  uint64_t before_sending, after_sending;
 
   cable_type = vid_check_cable ();
   if (cable_type == CT_VGA)
@@ -176,6 +252,11 @@ main (int argc, char *argv[])
     vid_init (DM_640x480_NTSC_IL, PM_RGB565);
 
   init_pvr ();
+
+#ifdef USE_DMA
+  pvr_set_vertbuf (PVR_LIST_OP_POLY, dmabuffers[0], 1024 * 1024);
+  pvr_set_vertbuf (PVR_LIST_TR_POLY, dmabuffers[1], 1024 * 1024);
+#endif
 
   glKosInit ();
   
@@ -229,10 +310,40 @@ main (int argc, char *argv[])
   printf ("Starting CD audio...\n");
   spu_cdda_volume (15, 15);
   spu_cdda_pan (0, 31);
+#ifdef SKIP_TO_TIME
+  {
+    CDROM_TOC toc_buffer;
+    int i, rv;
+    
+    memset (&toc_buffer, '\0', sizeof (toc_buffer));
+    
+    rv = cdrom_read_toc (&toc_buffer, 0);
+    
+    if (rv != 0)
+      {
+        printf ("Couldn't read CDROM TOC?\n");
+	return 0;
+      }
+    
+    for (i = 0; i < 99; i++)
+      printf ("entry: %d\n", toc_buffer.entry[i]);
+
+    printf ("first = %d, last = %d\n", toc_buffer.first, toc_buffer.last);
+    printf ("leadout_sector = %d\n", toc_buffer.leadout_sector);
+    
+    cdrom_cdda_play (toc_buffer.entry[2] + ((SKIP_TO_TIME * 75) / 1000),
+                     toc_buffer.first, 0, CDDA_SECTORS);
+  }
+#else
   cdrom_cdda_play (3, 3, 0, CDDA_TRACKS);
+#endif
 #endif
 
   start_time = timer_ms_gettime64 ();
+
+#ifdef SKIP_TO_TIME
+  offset_time = SKIP_TO_TIME;
+#endif
   
   while (!quit)
     {
@@ -246,6 +357,7 @@ main (int argc, char *argv[])
 	float incr[3], horiz[3], vert[3];
 	float pan_h = 0, pan_v = 0;
 	float facing_uncam[3];
+	static int printed_pos = 0;
 
 #ifdef DEBUG
         printf ("before controller loop\n");
@@ -255,9 +367,20 @@ main (int argc, char *argv[])
           if (st->buttons & CONT_START)
 	    quit = 1;
 	  if (st->buttons & CONT_A)
-	    eye_pos[0] += 0.05;
-	  if (st->buttons & CONT_B)
-	    eye_pos[0] -= 0.05;
+	    {
+	      if (!printed_pos)
+	        {
+		  printf ("{ %f, %f, %f }, /* eye pos */\n",
+			  eye_pos[0], eye_pos[1], eye_pos[2]);
+		  printf ("{ %f, %f, %f }, /* lookat */\n\n",
+			  eye_pos[0] + 3 * facing[0],
+			  eye_pos[1] + 3 * facing[1],
+			  eye_pos[2] + 3 * facing[2]);
+		  printed_pos = 1;
+		}
+	    }
+	  else
+	    printed_pos = 0;
 	  if (st->buttons & CONT_DPAD_RIGHT)
 	    pan_h = 0.05;
 	  if (st->buttons & CONT_DPAD_LEFT)
@@ -302,14 +425,15 @@ main (int argc, char *argv[])
 #endif
       }
 
-      current_time = timer_ms_gettime64 () - start_time; // 0;
+      current_time = offset_time + timer_ms_gettime64 () - start_time; // 0;
 #else
+      /* Normal running, not manual camera control (hold) mode.  */
       MAPLE_FOREACH_BEGIN (MAPLE_FUNC_CONTROLLER, cont_state_t, st)
         if (st->buttons & CONT_START)
 	  quit = 1;
       MAPLE_FOREACH_END ()
 
-      current_time = timer_ms_gettime64 () - start_time;
+      current_time = offset_time + timer_ms_gettime64 () - start_time;
 #endif
 
       /* For audio...  */
@@ -330,6 +454,14 @@ main (int argc, char *argv[])
 	      if (active_effects[i]->methods->uninit_effect)
 	        {
 	          active_effects[i]->methods->uninit_effect (
+		    active_effects[i]->params);
+		}
+	      /* If we're not going to use this one any more, release any
+	         global resources (etc.).  */
+	      if (active_effects[i]->finalize
+		  && active_effects[i]->methods->finalize)
+		{
+		  active_effects[i]->methods->finalize (
 		    active_effects[i]->params);
 		}
 	      active_effects[i] = NULL;
@@ -359,19 +491,33 @@ main (int argc, char *argv[])
       while (next_effect < num_effects
 	     && current_time >= sequence[next_effect].start_time)
 	{
-	  active_effects[num_active_effects] = &sequence[next_effect];
-
-	  /*printf ("init effect %d (%p, iparam=%d)\n", next_effect,
-		  sequence[next_effect].methods->init_effect,
-		  sequence[next_effect].iparam);*/
-
-	  if (sequence[next_effect].methods->init_effect)
+	  /* Only start the effect if it's before its ending time.  */
+	  if (current_time < sequence[next_effect].end_time)
 	    {
-	      sequence[next_effect].methods->init_effect (
-		sequence[next_effect].params);
+	      active_effects[num_active_effects] = &sequence[next_effect];
+
+	      /*printf ("init effect %d (%p, iparam=%d)\n", next_effect,
+		      sequence[next_effect].methods->init_effect,
+		      sequence[next_effect].iparam);*/
+
+	      if (sequence[next_effect].methods->init_effect)
+		{
+		  sequence[next_effect].methods->init_effect (
+		    sequence[next_effect].params);
+		}
+
+	      num_active_effects++;
+	    }
+	  else if (sequence[next_effect].finalize)
+	    {
+	      /* We must have skipped over an effect: finalize it now.  */
+	      if (sequence[next_effect].methods->finalize)
+	        {
+	          sequence[next_effect].methods->finalize (
+		    sequence[next_effect].params);
+		}
 	    }
 
-	  num_active_effects++;
 	  next_effect++;
 	}
 
@@ -410,18 +556,21 @@ main (int argc, char *argv[])
       printf ("begin frame\n");
 #endif
 
-      glKosBeginFrame ();
+      pvr_wait_ready ();
+      pvr_scene_begin ();
 
+      before_sending = timer_ms_gettime64 ();
+#ifdef USE_DMA
       for (i = 0; i < num_active_effects; i++)
         {
 	  if (active_effects[i]->methods->display_effect)
 	    active_effects[i]->methods->display_effect (
 	      current_time - active_effects[i]->start_time,
 	      active_effects[i]->params, active_effects[i]->iparam, view,
-	      &lights, 0);
+	      &lights, -1);
 	}
-
-      glKosFinishList ();
+#else
+      pvr_list_begin (PVR_LIST_OP_POLY);
       glKosMatrixDirty ();
 
       for (i = 0; i < num_active_effects; i++)
@@ -430,10 +579,48 @@ main (int argc, char *argv[])
 	    active_effects[i]->methods->display_effect (
 	      current_time - active_effects[i]->start_time,
 	      active_effects[i]->params, active_effects[i]->iparam, view,
-	      &lights, 1);
+	      &lights, PVR_LIST_OP_POLY);
 	}
 
-      glKosFinishFrame ();
+      pvr_list_finish ();
+      pvr_list_begin (PVR_LIST_TR_POLY);
+      glKosMatrixDirty ();
+
+      for (i = 0; i < num_active_effects; i++)
+        {
+	  if (active_effects[i]->methods->display_effect)
+	    active_effects[i]->methods->display_effect (
+	      current_time - active_effects[i]->start_time,
+	      active_effects[i]->params, active_effects[i]->iparam, view,
+	      &lights, PVR_LIST_TR_POLY);
+	}
+
+      pvr_list_finish ();
+
+      pvr_list_begin (PVR_LIST_PT_POLY);
+      glKosMatrixDirty ();
+
+      for (i = 0; i < num_active_effects; i++)
+        {
+	  if (active_effects[i]->methods->display_effect)
+	    active_effects[i]->methods->display_effect (
+	      current_time - active_effects[i]->start_time,
+	      active_effects[i]->params, active_effects[i]->iparam, view,
+	      &lights, PVR_LIST_PT_POLY);
+	}
+
+      pvr_list_finish ();
+
+#endif
+      after_sending = timer_ms_gettime64 ();
+
+      pvr_scene_finish ();
+
+/*
+      printf ("transform %d / render %d\n", (int)
+        (timer_ms_gettime64 () - after_sending),
+	(int) (after_sending - before_sending));
+*/
       
 #ifdef DEBUG
       printf ("finished frame\n");

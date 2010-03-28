@@ -4,6 +4,7 @@
 #include "object.h"
 
 extern object *create_skybox (float radius, pvr_ptr_t textures[6],
-			      unsigned int xsize, unsigned int ysize);
+			      unsigned int xsize, unsigned int ysize,
+			      unsigned int format);
 
 #endif

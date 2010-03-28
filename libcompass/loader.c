@@ -1,3 +1,5 @@
+#include <stdlib.h>
+
 #include "object.h"
 
 #undef DEBUG
@@ -18,6 +20,12 @@ load_object (const char *filename)
   strip *strips = NULL;
   state s = NOTHING;
   unsigned int verts = 0, norms = 0, texcoords = 0;
+  
+  if (!f)
+    {
+      fprintf (stderr, "Couldn't load object '%s'\n", filename);
+      exit (1);
+    }
   
   while (!feof (f))
     {

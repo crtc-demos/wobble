@@ -12,6 +12,7 @@
 #include "object.h"
 #include "palette.h"
 #include "timing.h"
+#include "cam_path.h"
 
 #define XSIZE 64
 #define YSIZE 64
@@ -49,6 +50,7 @@ has equidistant neighbours like this:
        5---4
 
 ***/
+
 
 #define HSCALE	3.0
 #define VSCALE	0.25
@@ -267,7 +269,9 @@ update_strips (object *obj, int clockwise)
 static pvr_ptr_t highlight = 0;
 static object *water;
 static fakephong_info f_phong;
+#if 0
 static envmap_dual_para_info envmap;
+#endif
 static object_orientation obj_orient;
 
 static void
@@ -276,12 +280,12 @@ preinit_water (void)
   water = allocate_water (XSIZE, YSIZE);
 
 #if 1
-  highlight = pvr_mem_malloc (256 * 256);
-  fakephong_highlight_texture (highlight, 256, 256, 50.0f);
+  highlight = pvr_mem_malloc (64 * 64);
+  fakephong_highlight_texture (highlight, 64, 64, 50.0f);
 
   f_phong.highlight = highlight;
-  f_phong.xsize = 256;
-  f_phong.ysize = 256;
+  f_phong.xsize = 64;
+  f_phong.ysize = 64;
   f_phong.intensity = 255;
   
   water->fake_phong = &f_phong;
@@ -318,10 +322,16 @@ preinit_water (void)
 
   object_set_ambient (water, 0, 0, 64);
   object_set_pigment (water, 0, 0, 255);
-  object_set_clipping (water, 0);
+  object_set_clipping (water, 1);
   
   obj_orient.modelview = &mview;
   obj_orient.normal_xform = &normxform;
+}
+
+static void
+finalize_water (void *params)
+{
+  pvr_mem_free (highlight);
 }
 
 static void
@@ -335,11 +345,10 @@ prepare_frame (uint32_t time_offset, void *params, int iparam, viewpoint *view,
 	       lighting *lights)
 {
   update_grid ();
-  update_grid ();
   update_strips (water, 1);
 
   light_set_active (lights, 1);
-  light_set_pos (lights, 0, 0, 5, 0);
+  light_set_pos (lights, 0, 5, 15, 0);
 
   glKosMatrixDirty ();
 
@@ -351,12 +360,19 @@ static void
 render_water (uint32_t time_offset, void *params, int iparam, viewpoint *view,
 	      lighting *lights, int pass)
 {
+#if 1
   glPushMatrix ();
-  glTranslatef (0, -2, 0);
+  glTranslatef (-15, 8.5, -7);
+  glScalef (3.5, 3.5, 3.5);
   glGetFloatv (GL_MODELVIEW_MATRIX, &mview[0][0]);
   vec_normal_from_modelview (&normxform[0][0], &mview[0][0]);
-  object_render_immediate (view, water, &obj_orient, lights, pass);
+#ifdef USE_DMA
+  object_render_deferred (view, water, &obj_orient, lights);
+#else
+  object_render_untextured_phong (view, water, &obj_orient, lights, pass);
+#endif
   glPopMatrix ();
+#endif
 }
 
 effect_methods wave_methods = {
@@ -364,5 +380,6 @@ effect_methods wave_methods = {
   .init_effect = &init_water,
   .prepare_frame = &prepare_frame,
   .display_effect = &render_water,
-  .uninit_effect = NULL
+  .uninit_effect = NULL,
+  .finalize = &finalize_water
 };

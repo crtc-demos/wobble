@@ -3,6 +3,7 @@
 #include <math.h>
 #include <stdlib.h>
 #include <alloca.h>
+#include <assert.h>
 
 #include <kos.h>
 
@@ -53,8 +54,7 @@ fakephong_highlight_texture (pvr_ptr_t highlight, unsigned int xsize,
 	tmphilight[y * ysize + x] = 255.0 * powf (dot, hardness);
       }
   
-  if (highlight == 0)
-    highlight = pvr_mem_malloc (xsize * ysize);
+  assert (highlight != 0);
 
   pvr_txr_load_ex (tmphilight, highlight, xsize, ysize, PVR_TXRLOAD_8BPP);
   
@@ -75,7 +75,7 @@ fakephong_texcoords (float *u, float *v, float reflection[3],
 		     float *transformed_z)
 {
   float light_sideways[3], light_realup[3];
-  float x, y, z, w = 1.0f;
+  float xformed_reflect[3];
   
   vec_cross (light_sideways, light, light_updir);
   vec_normalize (light_sideways, light_sideways);
@@ -101,15 +101,15 @@ fakephong_texcoords (float *u, float *v, float reflection[3],
   light_basis[2][3] = 0.0;
   light_basis[3][3] = 1.0;
 
-  mat_load (&light_basis);
-  x = reflection[0];
-  y = reflection[1];
-  z = reflection[2];
-  mat_trans_nodiv (x, y, z, w);
+  vec_transform3_fipr (&xformed_reflect[0], &light_basis[0][0], &reflection[0]);
+  *u = xformed_reflect[0] * 0.5 + 0.5;
+  *v = xformed_reflect[1] * 0.5 + 0.5;
+  *transformed_z = xformed_reflect[2];
 
-  *u = x * 0.5 + 0.5;
-  *v = y * 0.5 + 0.5;
-  *transformed_z = z;
+#if 0  
+  if (*u < 0.4 || *u > 0.6 || *v < 0.4 || *v > 0.6)
+    *transformed_z = -0.01;
+#endif
 }
 
 unsigned long
@@ -176,22 +176,26 @@ int
 fakephong_classify_triangle (float tri[3][3], int clockwise,
 			     vertex_attrs *attrs)
 {
-#if 1
   if (attrs[0].fakephong.transformed_z >= 0
-      || attrs[1].fakephong.transformed_z >= 0
-      || attrs[2].fakephong.transformed_z >= 0)
+      && attrs[1].fakephong.transformed_z >= 0
+      && attrs[2].fakephong.transformed_z >= 0)
     return 0;
   else
     return -1;
-#else
-  static int flipper = 0;
-  flipper = -1 - flipper;
-  return flipper;
-  /*if ((rand () & 128) == 128)
+}
+
+/* For the fast-path (untextured) version of fake phong shading.  */
+
+int
+fakephong_classify_triangle_1pass (float tri[3][3], int clockwise,
+				   vertex_attrs *attrs)
+{
+  if (attrs[0].fakephong.transformed_z >= 0
+      && attrs[1].fakephong.transformed_z >= 0
+      && attrs[2].fakephong.transformed_z >= 0)
     return 0;
   else
-    return -1;*/
-#endif
+    return 1;
 }
 
 #if 0

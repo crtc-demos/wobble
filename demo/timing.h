@@ -11,6 +11,7 @@ typedef struct {
   void (*display_effect) (uint32_t time_offset, void *params, int iparam,
 			  viewpoint *view, lighting *lights, int pass);
   void (*uninit_effect) (void *params);
+  void (*finalize) (void *params);
 } effect_methods;
 
 typedef struct {
@@ -19,6 +20,7 @@ typedef struct {
   effect_methods *methods;
   void *params;
   int iparam;
+  int finalize;
 } do_thing_at;
 
 extern float audio_amplitude (void);
