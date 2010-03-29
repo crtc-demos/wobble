@@ -117,7 +117,7 @@ load_object (const char *filename)
 	    if (sscanf (buf, " %f %f", &u, &v) > 0)
 	      {
 	        (*strips->texcoords)[texcoords][0] = u;
-		(*strips->texcoords)[texcoords][1] = v;
+		(*strips->texcoords)[texcoords][1] = 1.0 - v; /* ?? */
 		texcoords++;
 		if (texcoords == slen)
 		  {
