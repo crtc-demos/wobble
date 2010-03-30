@@ -55,7 +55,7 @@ static void
 prepare_frame (uint32_t time_offset, void *params, int iparam, viewpoint *view,
 	       lighting *lights)
 {
-  float zoom_amt = fsin (8 * M_PI * (float) time_offset / 2000.0);
+  float zoom_amt = fsin (8 * M_PI * (float) time_offset / 1700.0);
 
   view_set_look_at (view, 0, 0, 0);
   view_set_eye_pos (view, 0, 0, 8);

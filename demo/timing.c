@@ -46,8 +46,8 @@
 #undef HOLD
 #undef DEBUG
 
-#undef SKIP_TO_TIME
-//#define SKIP_TO_TIME 56000
+//#undef SKIP_TO_TIME
+#define SKIP_TO_TIME 28000
 
 #ifdef SKIP_TO_TIME
 uint64_t offset_time = 0;
@@ -108,46 +108,63 @@ static torus_params torus2 = {
 
 static do_thing_at sequence[] = {
 #if 1
-  {     0, 10500, &voronoi_methods, NULL, -1, 0 },
+  {      0,   5000, &voronoi_methods, NULL, -1, 0 },
 
-  { 10500, 31500, &wobble_tube_methods, NULL, 0, 0 },
-  { 10500, 31500, &skybox_methods, NULL, 0, 0 },
-  { 10500, 31500, &cam_path_methods, &wobble_tube_path, 0, 0 },
+  {   5000,  31500, &wobble_tube_methods, NULL, 0, 0 },
+  {   5000,  31500, &skybox_methods, NULL, 0, 0 },
+  {   5000,  31500, &cam_path_methods, &wobble_tube_path, 0, 0 },
 
-  { 31500, 33500, &voronoi_methods, NULL, 0, 0 },
+  {  31500,  33200, &zoomy_duck_methods, NULL, 0, 0 },
 
-  { 33500, 34500, &wobble_tube_methods, NULL, 0, 0 },
-  { 33500, 34500, &skybox_methods, NULL, 0, 0 },
-  { 33500, 34500, &cam_path_methods, &wobble_tube_path, 22000, 0 },
+  {  33200,  38000, &wobble_tube_methods, NULL, 0, 0 },
+  {  33200,  38000, &skybox_methods, NULL, 0, 0 },
+  {  33200,  38000, &cam_path_methods, &wobble_tube_path, 28200, 0 },
 
-  { 34500, 36500, &voronoi_methods, NULL, 1, 0 },
+  {  38000,  39700, &zoomy_duck_methods, NULL, 0, 1 },
 
-  { 36500, 37500, &wobble_tube_methods, NULL, 0, 0 },
-  { 36500, 37500, &skybox_methods, NULL, 0, 0 },
-  { 36500, 37500, &cam_path_methods, &wobble_tube_path, 24000, 0 },
+  {  39700,  50000, &wobble_tube_methods, NULL, 0, 0 },
+  {  39700,  50000, &skybox_methods, NULL, 0, 0 },
+  {  39700,  50000, &cam_path_methods, &wobble_tube_path, 34700, 0 },
 
-  { 37500, 39500, &voronoi_methods, NULL, 2, 0 },
-  { 39500, 41500, &voronoi_methods, NULL, 3, 0 },
+  /* Voronoi 'C'.  */
+  {  50000,  52000, &voronoi_methods, NULL, 0, 0 },
 
-  { 41500, 57950, &wobble_tube_methods, NULL, 0, 1 },
-  { 41500, 57950, &skybox_methods, NULL, 0, 0 },
-  { 41500, 57950, &cam_path_methods, &wobble_tube_path, 54000, 0 },
-  
-  { 58000, 60000, &zoomy_duck_methods, NULL, 0, 0 },
+  {  52000,  54000, &wobble_tube_methods, NULL, 0, 0 },
+  {  52000,  54000, &skybox_methods, NULL, 0, 0 },
+  {  52000,  54000, &cam_path_methods, &wobble_tube_path, 47000, 0 },
+
+  /* Voronoi 'R'.  */
+  {  54000,  56000, &voronoi_methods, NULL, 1, 0 },
+
+  {  56000,  58000, &wobble_tube_methods, NULL, 0, 0 },
+  {  56000,  58000, &skybox_methods, NULL, 0, 0 },
+  {  56000,  58000, &cam_path_methods, &wobble_tube_path, 51000, 0 },
+
+  /* Voronoi 'T'.  */
+  {  58000,  60000, &voronoi_methods, NULL, 2, 0 },
+
+  {  60000,  62000, &wobble_tube_methods, NULL, 0, 0 },
+  {  60000,  62000, &skybox_methods, NULL, 0, 0 },
+  {  60000,  62000, &cam_path_methods, &wobble_tube_path, 55000, 0 },
+
+  /* Voronoi 'C'  */
+  {  62000,  64000, &voronoi_methods, NULL, 3, 0 },
+
+  {  64000,  71000, &wobble_tube_methods, NULL, 0, 1 },
+  {  64000,  71000, &skybox_methods, NULL, 0, 0 },
+  {  64000,  71000, &cam_path_methods, &wobble_tube_path, 59000, 0 },
 
   /* Voronoi picture of duck!  */
-  { 60000, 64500, &voronoi_methods, NULL, 4, 0 },
+  {  71000,  73900, &voronoi_methods, NULL, 4, 0 },
 
-  { 64500, 66500, &zoomy_duck_methods, NULL, 0, 1 },
+  //{ 66500, 69450, &smokelife_methods, NULL, 0, 1 },
 
-  { 66500, 69450, &smokelife_methods, NULL, 0, 1 },
+  {  74000,  90000, &wave_methods, NULL, 0, 0 },
+  {  74000,  90000, &building_methods, NULL, 0, 0 },
+  {  74000,  90000, &cam_path_methods, &waves_camera_path, 0, 0 },
+  {  74000, 125000, &skybox_methods, NULL, 0, 1 },
 
-  { 69500, 90000, &wave_methods, NULL, 0, 0 },
-  { 69500, 90000, &building_methods, NULL, 0, 0 },
-  { 69500, 90000, &cam_path_methods, &waves_camera_path, 0, 0 },
-  { 69500, 125000, &skybox_methods, NULL, 0, 1 },
-
-  { 90000, 100000, &shiny_thing_methods, NULL, 0, 1 },
+  {  90000, 100000, &shiny_thing_methods, NULL, 0, 1 },
   
   /* skybox still active...  */
   { 100000, 125000, &wave_methods, NULL, 0, 1 },
