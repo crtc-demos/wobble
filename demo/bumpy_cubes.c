@@ -76,41 +76,58 @@ prepare_frame (uint32_t time_offset, void *params, int iparam, viewpoint *view,
 {
   float rot2_rad = rot2 * M_PI / 180.0f;
   float radius = 3.0f;
+  float block0 = (float) (3000 - ((int) time_offset % 6000)) / 400.0;
+  float block1 = (float) (3000 - ((int) (time_offset - 2000) % 6000)) / 400.0;
+  float block2 = (float) (3000 - ((int) (time_offset - 4000) % 6000)) / 400.0;
+  int block1_active = 0;
+  int block2_active = 0;
+  
+  if (time_offset > 2000)
+    block1_active = 1;
+  
+  if (time_offset > 4000)
+    block2_active = 1;
 
-  view_set_eye_pos (view, 0, 0, -4.5);
-  view_set_look_at (view, 0, 0, 0);
+  //view_set_eye_pos (view, 0, 0, -4.5);
+  //view_set_look_at (view, 0, 0, 0);
 
-  light_set_pos (lights, 0, 0.0, 0.0, 4.0);
+  //light_set_pos (lights, 0, 0.0, 0.0, 4.0);
 
   glKosMatrixDirty ();
 
   glMatrixMode (GL_MODELVIEW);
 
   glPushMatrix ();
-  glTranslatef (radius * fsin (rot2_rad), 0, 4 + radius * fcos (rot2_rad));
+  glTranslatef (radius * fsin (rot2_rad), block0, 4 + radius * fcos (rot2_rad));
   glRotatef (rot2, 0.0, 1.0, 0.0);
   glRotatef (rot1, 1.0, 0.0, 0.0);
   glGetFloatv (GL_MODELVIEW_MATRIX, &mview0[0][0]);
   vec_normal_from_modelview (&normxform0[0][0], &mview0[0][0]);
   glPopMatrix ();
 
-  glPushMatrix ();
-  glTranslatef (radius * fsin (rot2_rad + 2.0 * M_PI / 3.0), 0,
-		4 + radius * fcos (rot2_rad + 2.0 * M_PI / 3.0));
-  glRotatef (rot2 + 120, 0.0, 1.0, 0.0);
-  glRotatef (rot1 + 120, 1.0, 0.0, 0.0);
-  glGetFloatv (GL_MODELVIEW_MATRIX, &mview1[0][0]);
-  vec_normal_from_modelview (&normxform1[0][0], &mview1[0][0]);
-  glPopMatrix ();
+  if (block1_active)
+    {
+      glPushMatrix ();
+      glTranslatef (radius * fsin (rot2_rad + 2.0 * M_PI / 3.0), block1,
+		    4 + radius * fcos (rot2_rad + 2.0 * M_PI / 3.0));
+      glRotatef (rot2 + 120, 0.0, 1.0, 0.0);
+      glRotatef (rot1 + 120, 1.0, 0.0, 0.0);
+      glGetFloatv (GL_MODELVIEW_MATRIX, &mview1[0][0]);
+      vec_normal_from_modelview (&normxform1[0][0], &mview1[0][0]);
+      glPopMatrix ();
+    }
 
-  glPushMatrix ();
-  glTranslatef (radius * fsin (rot2_rad + 4.0 * M_PI / 3.0), 0,
-		4 + radius * fcos (rot2_rad + 4.0 * M_PI / 3.0));
-  glRotatef (rot2 + 240, 0.0, 1.0, 0.0);
-  glRotatef (rot1 + 240, 1.0, 0.0, 0.0);
-  glGetFloatv (GL_MODELVIEW_MATRIX, &mview2[0][0]);
-  vec_normal_from_modelview (&normxform2[0][0], &mview2[0][0]);
-  glPopMatrix ();
+  if (block2_active)
+    {
+      glPushMatrix ();
+      glTranslatef (radius * fsin (rot2_rad + 4.0 * M_PI / 3.0), block2,
+		    4 + radius * fcos (rot2_rad + 4.0 * M_PI / 3.0));
+      glRotatef (rot2 + 240, 0.0, 1.0, 0.0);
+      glRotatef (rot1 + 240, 1.0, 0.0, 0.0);
+      glGetFloatv (GL_MODELVIEW_MATRIX, &mview2[0][0]);
+      vec_normal_from_modelview (&normxform2[0][0], &mview2[0][0]);
+      glPopMatrix ();
+    }
 
   rot1 += 1;
   rot2 += 2;

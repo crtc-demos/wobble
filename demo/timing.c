@@ -46,8 +46,8 @@
 #undef HOLD
 #undef DEBUG
 
-//#undef SKIP_TO_TIME
-#define SKIP_TO_TIME 28000
+#undef SKIP_TO_TIME
+//#define SKIP_TO_TIME 73000
 
 #ifdef SKIP_TO_TIME
 uint64_t offset_time = 0;
@@ -173,9 +173,17 @@ static do_thing_at sequence[] = {
 
   /* Only use the fire once...  */
   { 125500, 160000, &fire_methods, NULL, 0, 1 },
-  { 135500, 150000, &bumpy_cube_methods, NULL, 0, 0 },
+  { 135500, 160000, &bumpy_cube_methods, NULL, 0, 0 },
 
   { 160000, 180000, &duck_fountain_methods, NULL, 0, 0 }
+
+#elif 1
+  { 0, 300000, &wave_methods, NULL, 0, 0 },
+  { 0, 300000, &building_methods, NULL, 0, 0 },
+
+#elif 0
+  { 0, 300000, &fire_methods, NULL, 0, 1 },
+  { 0, 300000, &bumpy_cube_methods, NULL, 0, 0 },
 
 #elif 0
   { 0, 300000, &smokelife_methods, NULL, 0, 0 }

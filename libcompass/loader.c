@@ -64,6 +64,16 @@ load_object (const char *filename)
 	      s = TEXCOORDS;
 	      strips->texcoords = malloc (slen * 2 * sizeof (float));
 	    }
+	  else if (strncmp (buf, "texidx", 6) == 0)
+	    {
+	      int tex;
+	      sscanf (buf, "texidx %d", &tex);
+	      if (tex >= 0)
+	        {
+		  strips->s_attrs = malloc (sizeof (strip_attrs));
+		  strips->s_attrs->txr_idx = tex;
+		}
+	    }
 	  else if (strncmp (buf, "end", 3) == 0)
 	    s = NOTHING;
 	  break;

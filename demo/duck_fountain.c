@@ -32,7 +32,7 @@ static object_orientation obj_orient = {
   .dirty = 1
 };
 
-#define DUCKS 10
+#define DUCKS 8
 
 static float rot1 = 0;
 

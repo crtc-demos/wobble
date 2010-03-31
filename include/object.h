@@ -28,6 +28,7 @@ typedef struct
   unsigned int xsize;
   unsigned int ysize;
   unsigned int txr_fmt;
+  unsigned int txr_idx;
   /* Not 100% sure about this either.  */
   float uv_orient[3];
 } strip_attrs;

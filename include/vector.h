@@ -204,11 +204,11 @@ vec_transform3_fipr (FLOAT_TYPE *dst, const FLOAT_TYPE *mat,
 		     const FLOAT_TYPE *src)
 {
   dst[0] = fipr (mat[0], mat[4], mat[8], mat[12],
-		 src[0], src[1], src[2], 0.0f);
+		 src[0], src[1], src[2], 1.0f);
   dst[1] = fipr (mat[1], mat[5], mat[9], mat[13],
-		 src[0], src[1], src[2], 0.0f);
+		 src[0], src[1], src[2], 1.0f);
   dst[2] = fipr (mat[2], mat[6], mat[10], mat[14],
-		 src[0], src[1], src[2], 0.0f);
+		 src[0], src[1], src[2], 1.0f);
 }
 
 static __inline__ void

@@ -1,6 +1,6 @@
 
 	CC =		kos-cc
-	CFLAGS =	-O2 -Wall
+	CFLAGS =	-O3 -Wall
 	INCLUDE =	-I../include
 	STRIP =		kos-strip
 	DEPFLAGS =	-DDREAMCAST_KOS -D_arch_dreamcast

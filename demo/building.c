@@ -1,5 +1,6 @@
 #include <math.h>
 #include <stdint.h>
+#include <assert.h>
 
 #include <kos.h>
 #include <kmg/kmg.h>
@@ -14,6 +15,7 @@
 #include "timing.h"
 #include "cam_path.h"
 #include "loader.h"
+#include "cube.h"
 
 static float building_path[][3] = {
 { 11.622311, -0.154918, 16.760166 }, /* eye pos */        
@@ -209,31 +211,68 @@ static object_orientation obj_orient = {
 };
 
 static object *holder;
-static pvr_ptr_t concrete_texture = 0;
+static pvr_ptr_t texture[4] = {0, 0, 0, 0};
+
+static object *floor_box;
 
 static void
 preinit_building (void)
 {
+  static int initialised = 0;
+  
+  if (initialised)
+    return;
+
   holder = load_object ("/rd/stair_things.strips");
   
   object_set_ambient (holder, 64, 64, 64);
   object_set_pigment (holder, 255, 255, 255);
   object_set_clipping (holder, 1);
+
+  floor_box = cube_create (100);
+  object_set_ambient (floor_box, 32, 32, 32);
+  object_set_pigment (floor_box, 96, 96, 96);
+  object_set_clipping (floor_box, 1);
+  
+  initialised = 1;
 }
 
 static void
 upload_texture (void *params)
 {
   kos_img_t txr;
+  strip *iter;
 
-  kmg_to_img ("/rd/tex1.kmg", &txr);
-  concrete_texture = pvr_mem_malloc (txr.byte_count);
-
-  pvr_txr_load_kimg (&txr, concrete_texture, 0);
-  object_set_all_textures (holder, concrete_texture, txr.w, txr.h,
-			   PVR_TXRFMT_VQ_ENABLE | PVR_TXRFMT_TWIDDLED
-			   | PVR_TXRFMT_RGB565);
+  kmg_to_img ("/rd/plain1.kmg", &txr);
+  texture[0] = pvr_mem_malloc (txr.byte_count);
+  pvr_txr_load_kimg (&txr, texture[0], 0);
   kos_img_free (&txr, 0);
+
+  kmg_to_img ("/rd/shouts1.kmg", &txr);
+  texture[1] = pvr_mem_malloc (txr.byte_count);
+  pvr_txr_load_kimg (&txr, texture[1], 0);
+  kos_img_free (&txr, 0);
+
+  kmg_to_img ("/rd/shouts2.kmg", &txr);
+  texture[2] = pvr_mem_malloc (txr.byte_count);
+  pvr_txr_load_kimg (&txr, texture[2], 0);
+  kos_img_free (&txr, 0);
+
+  kmg_to_img ("/rd/shouts3.kmg", &txr);
+  texture[3] = pvr_mem_malloc (txr.byte_count);
+  pvr_txr_load_kimg (&txr, texture[3], 0);
+  kos_img_free (&txr, 0);
+
+  /* Resolve textures.  */
+  for (iter = holder->striplist; iter; iter = iter->next)
+    {
+      assert (iter->s_attrs);
+      iter->s_attrs->xsize = 1024;
+      iter->s_attrs->ysize = 1024;
+      iter->s_attrs->txr_fmt = PVR_TXRFMT_VQ_ENABLE | PVR_TXRFMT_TWIDDLED
+			      | PVR_TXRFMT_RGB565;
+      iter->s_attrs->texture = texture[iter->s_attrs->txr_idx];
+    }
 
   holder->textured = 1;
 }
@@ -241,7 +280,10 @@ upload_texture (void *params)
 static void
 free_texture (void *params)
 {
-  pvr_mem_free (concrete_texture);
+  int i;
+  
+  for (i = 0; i < 4; i++)
+    pvr_mem_free (texture[i]);
 }
 
 static void
@@ -258,6 +300,13 @@ render_building (uint32_t time_offset, void *params, int iparam,
   glGetFloatv (GL_MODELVIEW_MATRIX, &mview[0][0]);
   vec_normal_from_modelview (&normxform[0][0], &mview[0][0]);
   object_render_immediate (view, holder, &obj_orient, lights, pass);
+  glPopMatrix ();
+  
+  glPushMatrix ();
+  glTranslatef (0, -102, 0);
+  glGetFloatv (GL_MODELVIEW_MATRIX, &mview[0][0]);
+  vec_normal_from_modelview (&normxform[0][0], &mview[0][0]);
+  object_render_immediate (view, floor_box, &obj_orient, lights, pass);
   glPopMatrix ();
 }
 
