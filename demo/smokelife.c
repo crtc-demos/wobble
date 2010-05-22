@@ -8,6 +8,7 @@
 
 static pvr_ptr_t sltex;
 static pvr_ptr_t blob;
+static pvr_ptr_t dub;
 
 #define SMOKES 8
 
@@ -33,6 +34,11 @@ smokelife_preinit (void)
   blob = pvr_mem_malloc (256 * 256 * 2);
   pvr_txr_load_kimg (&txr, blob, PVR_TXRLOAD_SQ);
   kos_img_free (&txr, 0);
+
+  kmg_to_img ("/rd/dub.kmg", &txr);
+  dub = pvr_mem_malloc (256 * 128 * 2);
+  pvr_txr_load_kimg (&txr, dub, PVR_TXRLOAD_SQ);
+  kos_img_free (&txr, 0);
   
   for (i = 0; i < SMOKES; i++)
     {
@@ -50,6 +56,7 @@ finalize_smokes (void *params)
 {
   pvr_mem_free (blob);
   pvr_mem_free (sltex);
+  pvr_mem_free (dub);
 }
 
 static void
@@ -71,9 +78,10 @@ smokelife_effect (uint32_t time_offset, void *params, int iparam,
   pvr_poly_cxt_t cxt;
   pvr_poly_hdr_t hdr;
   pvr_poly_hdr_t hdr2;
+  pvr_poly_hdr_t hdr3;
   pvr_vertex_t vert;
   int i, num;
-  float amp = audio_amplitude ();
+  float amp = audio_amplitude (33);
   
   if (pass != PVR_LIST_OP_POLY && pass != PVR_LIST_TR_POLY)
     return;
@@ -175,6 +183,57 @@ smokelife_effect (uint32_t time_offset, void *params, int iparam,
 	  vert.u = 1.0;
 	  pvr_prim (&vert, sizeof (vert));
         }
+    }
+  else if (pass == PVR_LIST_OP_POLY)
+    {
+      float proportion, size, secs = (float) time_offset / 1000.0f;
+      const float lhs = -0.5;
+      const float rhs = 1.3;
+      const float mid = (lhs + rhs) / 2.0f;
+      
+      pvr_poly_cxt_txr (&cxt, pass, PVR_TXRFMT_RGB565 | PVR_TXRFMT_TWIDDLED,
+			256, 128, dub, PVR_FILTER_BILINEAR);
+      vert.argb = 0xffffffff;
+      cxt.txr.uv_clamp = PVR_UVCLAMP_UV;
+      pvr_poly_compile (&hdr3, &cxt);
+
+      if (secs > 0.5f && secs <= 1.0f)
+        proportion = (secs - 0.5) * 2.0f;
+      else if (secs > 1.0f && secs <= 4.0f)
+        proportion = 1.0f;
+      else if (secs > 4.0f && secs <= 4.5f)
+        proportion = (4.5f - secs) * 2.0f;
+      else
+        proportion = 0.0f;
+
+      size = proportion * 200;
+
+      pvr_prim (&hdr3, sizeof (hdr3));
+
+      vert.flags = PVR_CMD_VERTEX;
+      vert.x = 640.0f;
+      vert.y = 480.0f - size;
+      vert.z = 10.0f;
+      vert.u = mid + proportion * (rhs - mid);
+      vert.v = 0.0f;
+      vert.oargb = 0;
+      pvr_prim (&vert, sizeof (vert));
+
+      vert.flags = PVR_CMD_VERTEX;
+      vert.x = 640.0f;
+      vert.y = 480.0f;
+      vert.u = (lhs + rhs) / 2.0f;
+      vert.v = proportion * 1.5;
+      vert.oargb = 0;
+      pvr_prim (&vert, sizeof (vert));
+
+      vert.flags = PVR_CMD_VERTEX_EOL;
+      vert.x = 640.0f - size;
+      vert.y = 480.0f;
+      vert.u = mid + proportion * (lhs - mid);
+      vert.v = 0.0f;
+      vert.oargb = 0;
+      pvr_prim (&vert, sizeof (vert));
     }
 }
 

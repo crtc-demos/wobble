@@ -34,6 +34,8 @@
 
 #undef DEBUG
 
+#undef DEBUG_POOLS
+
 /*
 #ifndef SLOW_PVR_PRIM
 #define pvr_prim (DATA, SIZE) sq_cpy ((void *) PVR_TA_INPUT, (DATA), (SIZE))
@@ -387,9 +389,11 @@ retry:
 	}
       
       newpart = malloc (sizeof (mem_pool));
-      
+
+#ifdef DEBUG_POOLS
       fprintf (stderr, "Pool allocator: allocating new part (size %u)\n",
 	       newsize);
+#endif
       
       current_pool->next = newpart;
       
@@ -869,6 +873,7 @@ object_render_immediate (viewpoint *view, object *obj,
 		use_strip->s_attrs->txr_fmt, use_strip->s_attrs->xsize,
 		use_strip->s_attrs->ysize, use_strip->s_attrs->texture,
 		PVR_FILTER_BILINEAR);
+	      cxt.txr.uv_clamp = PVR_UVCLAMP_UV;
 	    }
 	  else
 	    pvr_poly_cxt_col (&cxt, PVR_LIST_OP_POLY);
@@ -908,7 +913,7 @@ object_render_immediate (viewpoint *view, object *obj,
 		//PREFETCH (&(*use_strip->normals)[i + 2][0]);
 
 		vert.flags = (last) ? PVR_CMD_VERTEX_EOL : PVR_CMD_VERTEX;
-		if (!obj->bump_map && use_strip->normals && lights->active > 0)
+		if (use_strip->normals && lights->active > 0)
 		  vert.argb = lightsource_diffuse (&(*use_strip->start)[i][0],
 		    &(*use_strip->normals)[i][0], &obj->ambient, &obj->pigment,
 		    &lights->light[0].pos_xform[0]);
@@ -1093,6 +1098,7 @@ object_render_immediate (viewpoint *view, object *obj,
 	  float light_incident[3], s_dot_n, t, f[3], d[3];
 	  float d_cross_r[3], dxr_len, d_len, q;
 	  int over_pi, over_2pi;
+	  float intensity_multiplier = 1.0f;
 
 	  pvr_poly_cxt_txr (&cxt, PVR_LIST_TR_POLY,
 			    PVR_TXRFMT_BUMP | PVR_TXRFMT_TWIDDLED,
@@ -1139,7 +1145,10 @@ object_render_immediate (viewpoint *view, object *obj,
 	  t = M_PI / 2 - acosf (s_dot_n);
 
 	  if (t < 0.0f)
-	    t = 0.0f;
+	    {
+	      t = 0.0f;
+	      intensity_multiplier = 0.0f;
+	    }
 
 	  /* Rotation (Q) angle:
 	     d x r = (|d| |r| sin Q) n
@@ -1160,7 +1169,7 @@ object_render_immediate (viewpoint *view, object *obj,
 	    q = 2 * M_PI - q;
 
 	  vert.oargb = bumpmap_set_bump_direction (t, 2 * M_PI - q,
-			 obj->bump_map->intensity);
+			 obj->bump_map->intensity * intensity_multiplier);
 
 	  pvr_prim (&hdr, sizeof (hdr));
 	  

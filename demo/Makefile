@@ -5,11 +5,12 @@
 	STRIP =		kos-strip
 	DEPFLAGS =	-DDREAMCAST_KOS -D_arch_dreamcast
 	GENROMFS =	$(KOS_GENROMFS)
+	OBJCOPY =	sh-elf-objcopy
 
 	OBJS =		draw_torus.o voronoi.o wobble_tube.o waves.o fire.o \
 			bumpy_cubes.o foggy_tubes.o zoomy_duck.o cam_path.o \
 			building.o duck_fountain.o sky_box.o shiny_thing.o \
-			smokelife.o timing.o romdisk.o
+			smokelife.o end_screen.o timing.o romdisk.o
 	ROMDISK =	romdisk.img
 
 	TARGET =	demo.elf
@@ -17,7 +18,7 @@
 	SRC =		draw_torus.c voronoi.c wobble_tube.c waves.c fire.c \
 			bumpy_cubes.c foggy_tubes.c zoomy_duck.c cam_path.c \
 			building.c duck_fountain.c sky_box.c shiny_thing.c \
-			smokelife.c timing.c
+			smokelife.c end_screen.c timing.c
 
 .PHONY:	.depend
 
@@ -34,7 +35,11 @@ run:	$(TARGET)
 
 $(TARGET):	$(OBJS)
 	$(KOS_CC) $(KOS_CFLAGS) $(KOS_LDFLAGS) -o $(TARGET) $(KOS_START) $(OBJS) -L../libcompass -lgl -lpng -ljpeg -lkmg -lz -lcompass -lkosutils -lm $(KOS_LIBS)
-	#$(STRIP) $(TARGET)
+	$(STRIP) $(TARGET)
+
+.PHONY:	bin
+bin:	$(TARGET)
+	$(OBJCOPY) -O binary $(TARGET) demo.bin
 
 .PHONY: $(ROMDISK)
 $(ROMDISK): imagedir_clean

@@ -40,8 +40,8 @@ preinit_bumpy_cubes (void)
 
   bumpmap_auto_uv_orient (cube);
   
-  object_set_ambient (cube, 0.2, 0.1, 0.0);
-  object_set_pigment (cube, 1.0, 0.7, 0.0);
+  object_set_ambient (cube, 0, 0, 0);
+  object_set_pigment (cube, 255, 255, 128);
   
   bumpinfo.intensity = 1.0f;
   cube->bump_map = &bumpinfo;
@@ -99,7 +99,7 @@ prepare_frame (uint32_t time_offset, void *params, int iparam, viewpoint *view,
 
   glPushMatrix ();
   glTranslatef (radius * fsin (rot2_rad), block0, 4 + radius * fcos (rot2_rad));
-  glRotatef (rot2, 0.0, 1.0, 0.0);
+  glRotatef (-rot2 * 2, 0.0, 1.0, 0.0);
   glRotatef (rot1, 1.0, 0.0, 0.0);
   glGetFloatv (GL_MODELVIEW_MATRIX, &mview0[0][0]);
   vec_normal_from_modelview (&normxform0[0][0], &mview0[0][0]);
@@ -110,7 +110,7 @@ prepare_frame (uint32_t time_offset, void *params, int iparam, viewpoint *view,
       glPushMatrix ();
       glTranslatef (radius * fsin (rot2_rad + 2.0 * M_PI / 3.0), block1,
 		    4 + radius * fcos (rot2_rad + 2.0 * M_PI / 3.0));
-      glRotatef (rot2 + 120, 0.0, 1.0, 0.0);
+      glRotatef (-rot2 * 2 + 120, 0.0, 1.0, 0.0);
       glRotatef (rot1 + 120, 1.0, 0.0, 0.0);
       glGetFloatv (GL_MODELVIEW_MATRIX, &mview1[0][0]);
       vec_normal_from_modelview (&normxform1[0][0], &mview1[0][0]);
@@ -122,7 +122,7 @@ prepare_frame (uint32_t time_offset, void *params, int iparam, viewpoint *view,
       glPushMatrix ();
       glTranslatef (radius * fsin (rot2_rad + 4.0 * M_PI / 3.0), block2,
 		    4 + radius * fcos (rot2_rad + 4.0 * M_PI / 3.0));
-      glRotatef (rot2 + 240, 0.0, 1.0, 0.0);
+      glRotatef (-rot2 * 2 + 240, 0.0, 1.0, 0.0);
       glRotatef (rot1 + 240, 1.0, 0.0, 0.0);
       glGetFloatv (GL_MODELVIEW_MATRIX, &mview2[0][0]);
       vec_normal_from_modelview (&normxform2[0][0], &mview2[0][0]);

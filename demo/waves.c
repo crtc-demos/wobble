@@ -89,7 +89,7 @@ update_grid (void)
   const float drag = 0.0045;
 #endif
   int i, j;
-  float amp = audio_amplitude ();
+  float amp = audio_amplitude (133);
 
   const float yfac = sin (M_PI / 3.0);
   const float iscale = 1.0 / (float) XSIZE, jscale = yfac / (float) YSIZE;

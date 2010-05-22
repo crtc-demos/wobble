@@ -1,4 +1,4 @@
-/* Fake phong highlighting.  */
+/* Timing/main demo harness.  */
 
 #include <math.h>
 #include <stdlib.h>
@@ -41,13 +41,14 @@
 #include "sky_box.h"
 #include "shiny_thing.h"
 #include "smokelife.h"
+#include "end_screen.h"
 
 #define PLAY_AUDIO
 #undef HOLD
 #undef DEBUG
 
 #undef SKIP_TO_TIME
-//#define SKIP_TO_TIME 73000
+//#define SKIP_TO_TIME 135000
 
 #ifdef SKIP_TO_TIME
 uint64_t offset_time = 0;
@@ -159,27 +160,40 @@ static do_thing_at sequence[] = {
 
   //{ 66500, 69450, &smokelife_methods, NULL, 0, 1 },
 
-  {  74000,  90000, &wave_methods, NULL, 0, 0 },
-  {  74000,  90000, &building_methods, NULL, 0, 0 },
-  {  74000,  90000, &cam_path_methods, &waves_camera_path, 0, 0 },
-  {  74000, 125000, &skybox_methods, NULL, 0, 1 },
+  {  74000,  95000, &building_methods, NULL, 0, 0 },
+  {  74000,  95000, &cam_path_methods, &waves_camera_path, 0, 0 },
+  {  74000, 120000, &skybox_methods, NULL, 0, 1 },
 
-  {  90000, 100000, &shiny_thing_methods, NULL, 0, 1 },
+  {  95000, 105000, &shiny_thing_methods, NULL, 0, 1 },
+  {  95000, 105000, &cam_path_methods, &shiny_thing_cam_path, 0, 0 },
   
   /* skybox still active...  */
-  { 100000, 125000, &wave_methods, NULL, 0, 1 },
-  { 100000, 125000, &building_methods, NULL, 0, 0 },
-  { 100000, 125000, &cam_path_methods, &waves_camera_path, 35000, 0 },
+  { 105000, 120000, &wave_methods, NULL, 0, 1 },
+  { 105000, 120000, &building_methods, NULL, 0, 0 },
+  { 105000, 120000, &cam_path_methods, &waves_camera_path, 30000, 0 },
+
+  { 120000, 125000, &smokelife_methods, NULL, 0, 1 },
 
   /* Only use the fire once...  */
-  { 125500, 160000, &fire_methods, NULL, 0, 1 },
-  { 135500, 160000, &bumpy_cube_methods, NULL, 0, 0 },
+  { 125500, 158600, &fire_methods, NULL, 0, 1 },
+  { 135500, 158600, &bumpy_cube_methods, NULL, 0, 0 },
 
-  { 160000, 180000, &duck_fountain_methods, NULL, 0, 0 }
+  { 158700, 175000, &duck_fountain_methods, NULL, 0, 0 },
+  
+  { 158700, 185000, &end_screen_methods, NULL, 0, 0 }
 
-#elif 1
+#elif 0
+  {   0, 300000, &shiny_thing_methods, NULL, 0, 1 },
+  {   0, 300000, &skybox_methods, NULL, 0, 0 },
+
+#elif 0
+  {   0, 300000, &wobble_tube_methods, NULL, 0, 0 },
+  {   0, 300000, &skybox_methods, NULL, 0, 0 },
+
+#elif 0
   { 0, 300000, &wave_methods, NULL, 0, 0 },
   { 0, 300000, &building_methods, NULL, 0, 0 },
+  { 0, 300000, &skybox_methods, NULL, 0, 1 },
 
 #elif 0
   { 0, 300000, &fire_methods, NULL, 0, 1 },
@@ -225,9 +239,9 @@ static unsigned char *audio_proxy;
 static unsigned int proxy_length;
 static unsigned int current_millis;
 
-float audio_amplitude (void)
+float audio_amplitude (int delay)
 {
-  unsigned int idx = current_millis / 10;
+  unsigned int idx = (current_millis + delay) / 10;
   
   if (idx < proxy_length)
     return (float) audio_proxy[idx] / 32.0f;
@@ -348,6 +362,20 @@ main (int argc, char *argv[])
 
   proxy_length = fs_load ("/rd/people_100hz.raw", (void **) &audio_proxy);
   printf ("Read %d bytes of audio proxy data\n", proxy_length);
+
+  printf ("Press 'A' to start\n");
+  
+  {
+    int start_now = 0;
+    
+    while (!start_now)
+      {
+	MAPLE_FOREACH_BEGIN (MAPLE_FUNC_CONTROLLER, cont_state_t, st)
+	  if (st->buttons & CONT_A)
+	    start_now = 1;
+	MAPLE_FOREACH_END ()
+      }
+  }
 
 #ifdef PLAY_AUDIO
   printf ("Starting CD audio...\n");

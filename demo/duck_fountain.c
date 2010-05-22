@@ -69,9 +69,15 @@ prepare_frame (uint32_t time_offset, void *params, int iparam, viewpoint *view,
 	       lighting *lights)
 {
   unsigned int i;
+  float secs = (float) time_offset / 1000.0f;
+  float lookat_y = 0.0f;
+  
+  if (secs > 8)
+    lookat_y = secs - 8;
 
   view_set_eye_pos (view, 0, 0, 15);
-  view_set_look_at (view, 0, 0, 0);
+  view_set_look_at (view, 0, lookat_y, 0);
+  light_set_pos (lights, 0, 3, 10, 15);
 
   for (i = 0; i < active; i++)
     {
@@ -141,6 +147,13 @@ display_fountain (uint32_t time_offset, void *params, int iparam,
       glRotatef (rot1, rotaxis[i][0], rotaxis[i][1], rotaxis[i][2]);
       glScalef (0.3, 0.3, 0.3);
       glGetFloatv (GL_MODELVIEW_MATRIX, &mview[0][0]);
+      
+      /* Mmmm, very generalised.  */
+      if (pos[i][2] > 12)
+        object_set_clipping (duck, 1);
+      else
+        object_set_clipping (duck, 0);
+      
       vec_normal_from_modelview (&normxform[0][0], &mview[0][0]);
       object_render_immediate (view, duck, &obj_orient, lights, pass);
       glPopMatrix ();

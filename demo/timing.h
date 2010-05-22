@@ -25,6 +25,6 @@ typedef struct {
   int finalize;
 } do_thing_at;
 
-extern float audio_amplitude (void);
+extern float audio_amplitude (int delay);
 
 #endif

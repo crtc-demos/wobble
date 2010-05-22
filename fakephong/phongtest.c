@@ -21,6 +21,7 @@
 #include "palette.h"
 #include "vertex_fog.h"
 #include "loader.h"
+#include "lighting.h"
 
 #define PARAMETERISATION 1
 
@@ -516,7 +517,7 @@ main (int argc, char *argv[])
   /* Set up the bomb!  */
   //sphobj->env_map = &envmap;
 
-#elif 0
+#elif 1
   /* It's not really very accurately named at the moment.  */
 #if 0
   sphobj = /*geosphere_create (2);*/ torus_create (1.0, 0.4, 16, 32);
@@ -535,7 +536,8 @@ main (int argc, char *argv[])
 
   {
     pvr_ptr_t bumptxr = bumpmap_load_raw ("/rd/bump.raw", 128, 128);
-    object_set_all_textures (sphobj, bumptxr, 128, 128);
+    object_set_all_textures (sphobj, bumptxr, 128, 128,
+			     PVR_TXRFMT_BUMP | PVR_TXRFMT_TWIDDLED);
     bumpmap_auto_uv_orient (sphobj);
     
     binfo.intensity = 1.0f;
@@ -622,8 +624,8 @@ main (int argc, char *argv[])
   obj_orient.modelview = &mview;
   obj_orient.normal_xform = &normxform;
   
-  memcpy (lights.light0_up, light_updir, sizeof (float) * 3);
-  memcpy (lights.light0_pos, light_pos, sizeof (float) * 3);
+  light_set_up (&lights, 0, light_updir[0], light_updir[1], light_updir[2]);
+  light_set_pos (&lights, 0, light_pos[0], light_pos[1], light_pos[2]);
   
   while (!quit)
     {

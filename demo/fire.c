@@ -316,7 +316,7 @@ draw_cooler (void)
       {
         float ang = (float) i * 2 * M_PI / 20.0f;
 	float ang1 = (float) (i + 1) * 2 * M_PI / 20.0f;
-	float amp = audio_amplitude ();
+	float amp = audio_amplitude (66);
 
         vert.flags = PVR_CMD_VERTEX;
 	vert.x = flame_pos_xformed[0];
